@@ -928,7 +928,7 @@ export async function getAllVendidasMotos(): Promise<VendidaMotoRow[]> {
   );
 
   return ((data ?? []) as unknown as Array<
-    VendidaMotoRow & {
+    Omit<VendidaMotoRow, "users" | "bike_table"> & {
       users?:
         | {
             id: number;
