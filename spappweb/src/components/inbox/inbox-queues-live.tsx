@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { Bike, ShoppingBag, Store } from "lucide-react";
 import { refreshInboxQueues } from "@/lib/actions/inbox-actions";
@@ -119,21 +118,16 @@ export function InboxQueuesLive({ initialQueues, bikes }: InboxQueuesLiveProps) 
           }
         />
         <div className="flex items-center justify-center gap-4 rounded-xl border border-border bg-card px-4 py-3">
-          <Image
+          {/* ponytail: <img> evita el warning de aspect-ratio de next/image en logos estáticos */}
+          <img
             src="/beralogo.jpg"
             alt="Bera"
-            width={120}
-            height={48}
             className="h-10 w-auto object-contain sm:h-12"
-            priority
           />
-          <Image
+          <img
             src="/logosolucionesgarrido.jpg"
             alt="Soluciones Garrido"
-            width={160}
-            height={48}
             className="h-10 w-auto object-contain sm:h-12"
-            priority
           />
         </div>
       </div>
