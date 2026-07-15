@@ -125,8 +125,8 @@ export function InboxQueuesLive({ initialQueues, bikes }: InboxQueuesLiveProps) 
             className="h-10 w-auto object-contain sm:h-12"
           />
           <img
-            src="/logosolucionesgarrido.jpg"
-            alt="Soluciones Garrido"
+            src="/solucionespinillalogo.jpeg"
+            alt="Soluciones Pinilla"
             className="h-10 w-auto object-contain sm:h-12"
           />
         </div>
