@@ -14,7 +14,6 @@ import { DeliveryPanel } from "@/components/pipeline/delivery-panel";
 import { RentingPanel } from "@/components/pipeline/renting-panel";
 import { MoraSummaryBanner } from "@/components/pipeline/mora-summary-banner";
 import { TrackingPanel } from "@/components/pipeline/tracking-panel";
-import { GpsMotoPanel } from "@/components/pipeline/gps-moto-panel";
 
 interface ClientPipelineViewProps {
   pipeline: ClientPipeline;
@@ -213,12 +212,6 @@ export function ClientPipelineView({
             recoger={pipeline.recoger}
             atraso={pipeline.atraso}
           />
-          {pipeline.compra?.placa?.trim() ? (
-            <GpsMotoPanel
-              placa={pipeline.compra.placa}
-              userId={userId}
-            />
-          ) : null}
         </div>
       </div>
     </div>

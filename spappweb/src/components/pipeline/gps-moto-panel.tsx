@@ -22,6 +22,8 @@ import {
 type GpsMotoPanelProps = {
   placa: string;
   userId: number;
+  /** Sin Card propio: para embeber en el resumen del cliente. */
+  embedded?: boolean;
 };
 
 function mismoPunto(a: PuntoRutaGps, b: PuntoRutaGps): boolean {
@@ -42,7 +44,11 @@ function enlaceGoogleMaps(coords: string): string {
   return `https://www.google.com/maps?q=${encodeURIComponent(coords)}`;
 }
 
-export function GpsMotoPanel({ placa, userId }: GpsMotoPanelProps) {
+export function GpsMotoPanel({
+  placa,
+  userId,
+  embedded = false,
+}: GpsMotoPanelProps) {
   const [gps, setGps] = useState<UbicacionGpsMoto | null>(null);
   const [ruta, setRuta] = useState<PuntoRutaGps[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -184,6 +190,156 @@ export function GpsMotoPanel({ placa, userId }: GpsMotoPanelProps) {
     [gps, placa, userId, refrescarPosicion],
   );
 
+  const cuerpo = (
+    <>
+      {cargando && !gps ? (
+        <p className="text-sm text-muted-foreground">Consultando GPS…</p>
+      ) : null}
+
+      {!cargando && !gps ? (
+        <p className="text-sm text-amber-800">
+          {mensajeSinGps ?? "Sin dispositivo GPS para esta placa"}
+        </p>
+      ) : null}
+
+      {gps ? (
+        <>
+          <div className="overflow-hidden rounded-lg border border-border">
+            <MapaGpsEnVivo
+              gps={gps}
+              ruta={ruta}
+              seguimientoActivo={enVivo}
+              proveedor={gps.proveedor}
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium">
+              {etiquetaEstadoGps(gps.online)}
+            </span>
+            <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium tabular-nums">
+              {Math.round(gps.speed)} km/h
+            </span>
+            <span
+              className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
+                gps.bloqueado
+                  ? "border-rose-300 bg-rose-50 text-rose-800"
+                  : "border-sky-300 bg-sky-50 text-sky-800"
+              }`}
+            >
+              Motor {gps.bloqueado ? "bloqueado" : "libre"}
+            </span>
+          </div>
+
+          <div className="text-xs text-muted-foreground">
+            <p className="truncate font-medium text-foreground">
+              {placa.toUpperCase()}
+              {gps ? ` · ${etiquetaProveedorGps(gps.proveedor)}` : null}
+            </p>
+            {gps.nombreDispositivo &&
+            gps.nombreDispositivo.trim().toUpperCase().replace(/[\s-]/g, "") !==
+              placa.trim().toUpperCase().replace(/[\s-]/g, "") ? (
+              <p
+                className="truncate text-muted-foreground"
+                title={gps.nombreDispositivo}
+              >
+                GPS: {gps.nombreDispositivo}
+              </p>
+            ) : null}
+            <p className="mt-1 tabular-nums">
+              Última: {gps.time}
+              {enVivo
+                ? ` · cada ${etiquetaIntervaloPollGps(gps.proveedor)}`
+                : null}
+              {actualizando ? " · actualizando…" : null}
+            </p>
+            <p className="mt-0.5 tabular-nums">
+              {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}
+            </p>
+          </div>
+
+          {errorLive ? (
+            <p className="text-xs text-amber-700">{errorLive}</p>
+          ) : null}
+
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="destructive"
+              disabled={!!enviando}
+              onClick={() => enviarComando("bloquear")}
+            >
+              <PowerOff className="h-4 w-4" />
+              {enviando === "bloquear" ? "Enviando…" : "Apagar"}
+            </Button>
+            <Button
+              disabled={!!enviando}
+              onClick={() => enviarComando("desbloquear")}
+            >
+              <Power className="h-4 w-4" />
+              {enviando === "desbloquear" ? "Enviando…" : "Prender"}
+            </Button>
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={() => setEnVivo((v) => !v)}
+            >
+              {enVivo ? "Pausar" : "Reanudar"}
+            </Button>
+            <Button variant="outline" size="sm" className="flex-1" asChild>
+              <a
+                href={enlaceGoogleMaps(gps.coords)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Maps
+              </a>
+            </Button>
+          </div>
+        </>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={actualizando}
+          onClick={() => {
+            setEnVivo(true);
+            void refrescarPosicion();
+          }}
+        >
+          Reintentar
+        </Button>
+      )}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex h-full flex-col gap-3 p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold">GPS moto</p>
+            <p className="text-xs text-muted-foreground">
+              Placa {placa.toUpperCase()}
+              {gps ? ` · ${etiquetaProveedorGps(gps.proveedor)}` : null}
+            </p>
+          </div>
+          {gps && enVivo ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+              <Radio className="h-3 w-3" />
+              En vivo
+            </span>
+          ) : null}
+        </div>
+        <div className="flex flex-col gap-3">{cuerpo}</div>
+      </div>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -201,129 +357,7 @@ export function GpsMotoPanel({ placa, userId }: GpsMotoPanelProps) {
           {gps ? ` · ${etiquetaProveedorGps(gps.proveedor)}` : null}
         </p>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {cargando && !gps ? (
-          <p className="text-sm text-muted-foreground">Consultando GPS…</p>
-        ) : null}
-
-        {!cargando && !gps ? (
-          <p className="text-sm text-amber-800">
-            {mensajeSinGps ?? "Sin dispositivo GPS para esta placa"}
-          </p>
-        ) : null}
-
-        {gps ? (
-          <>
-            <div className="overflow-hidden rounded-lg border border-border">
-              <MapaGpsEnVivo
-                gps={gps}
-                ruta={ruta}
-                seguimientoActivo={enVivo}
-                proveedor={gps.proveedor}
-              />
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium">
-                {etiquetaEstadoGps(gps.online)}
-              </span>
-              <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium tabular-nums">
-                {Math.round(gps.speed)} km/h
-              </span>
-              <span
-                className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
-                  gps.bloqueado
-                    ? "border-rose-300 bg-rose-50 text-rose-800"
-                    : "border-sky-300 bg-sky-50 text-sky-800"
-                }`}
-              >
-                Motor {gps.bloqueado ? "bloqueado" : "libre"}
-              </span>
-            </div>
-
-            <div className="text-xs text-muted-foreground">
-              <p className="truncate font-medium text-foreground">
-                {placa.toUpperCase()}
-              </p>
-              {gps.nombreDispositivo &&
-              gps.nombreDispositivo.trim().toUpperCase().replace(/[\s-]/g, "") !==
-                placa.trim().toUpperCase().replace(/[\s-]/g, "") ? (
-                <p
-                  className="truncate text-muted-foreground"
-                  title={gps.nombreDispositivo}
-                >
-                  GPS: {gps.nombreDispositivo}
-                </p>
-              ) : null}
-              <p className="mt-1 tabular-nums">
-                Última: {gps.time}
-                {enVivo
-                  ? ` · cada ${etiquetaIntervaloPollGps(gps.proveedor)}`
-                  : null}
-                {actualizando ? " · actualizando…" : null}
-              </p>
-              <p className="mt-0.5 tabular-nums">
-                {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}
-              </p>
-            </div>
-
-            {errorLive ? (
-              <p className="text-xs text-amber-700">{errorLive}</p>
-            ) : null}
-
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant="destructive"
-                disabled={!!enviando}
-                onClick={() => enviarComando("bloquear")}
-              >
-                <PowerOff className="h-4 w-4" />
-                {enviando === "bloquear" ? "Enviando…" : "Apagar"}
-              </Button>
-              <Button
-                disabled={!!enviando}
-                onClick={() => enviarComando("desbloquear")}
-              >
-                <Power className="h-4 w-4" />
-                {enviando === "desbloquear" ? "Enviando…" : "Prender"}
-              </Button>
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1"
-                onClick={() => setEnVivo((v) => !v)}
-              >
-                {enVivo ? "Pausar" : "Reanudar"}
-              </Button>
-              <Button variant="outline" size="sm" className="flex-1" asChild>
-                <a
-                  href={enlaceGoogleMaps(gps.coords)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Maps
-                </a>
-              </Button>
-            </div>
-          </>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={actualizando}
-            onClick={() => {
-              setEnVivo(true);
-              void refrescarPosicion();
-            }}
-          >
-            Reintentar
-          </Button>
-        )}
-      </CardContent>
+      <CardContent className="flex flex-col gap-4">{cuerpo}</CardContent>
     </Card>
   );
 }
