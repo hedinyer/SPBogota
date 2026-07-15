@@ -13,6 +13,10 @@ import {
 import { canChooseFlowOrder } from "@/lib/pipeline/step-logic";
 import { MONTO_VISITA_DEFAULT } from "@/lib/payments/visita-monto";
 import type { VisitaRow, UserMotoCompraRow } from "@/lib/pipeline/types";
+import {
+  hojaVidaFormSchema,
+  hojaVidaFormToJson,
+} from "@/lib/contracts/hoja-vida-schema";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage-buckets";
 import { storagePathFromPublicUrl } from "@/lib/utils/storage-urls";
@@ -141,6 +145,39 @@ const assignVisitSchema = z.object({
   visitadorId: z.number(),
   fechaProgramada: z.string().min(1),
 });
+
+const updateContractHojaVidaSchema = z.object({
+  contractId: z.string().uuid(),
+  userId: z.number().int().positive(),
+  hojaVida: hojaVidaFormSchema,
+});
+
+/** Admin corrige datos de hoja de vida en el contrato (no regenera PDFs). */
+export async function updateContractHojaVida(
+  input: z.infer<typeof updateContractHojaVidaSchema>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const parsed = updateContractHojaVidaSchema.parse(input);
+    const supabase = await assertAdmin();
+    const { error } = await supabase
+      .from("digital_contracts")
+      .update({
+        hoja_vida_data: hojaVidaFormToJson(parsed.hojaVida),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", parsed.contractId)
+      .eq("user_id", parsed.userId);
+
+    if (error) return { ok: false, error: mapDbError(error.message) };
+    revalidateClient(parsed.userId);
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "No se pudo guardar la hoja de vida.",
+    };
+  }
+}
 
 export async function assignVisit(input: z.infer<typeof assignVisitSchema>) {
   const parsed = assignVisitSchema.parse(input);
