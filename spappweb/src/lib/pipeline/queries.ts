@@ -79,6 +79,80 @@ function joinUser(raw: unknown): UserRow | null {
   return { id: Number(obj.id), user: String(obj.user) };
 }
 
+/** Select anidado para enriquecer filas del inbox (nombre, celular, selfie). */
+const INBOX_USER_SELECT =
+  "users(id, user, users_documents(selfie_url), digital_contracts(hoja_vida_data, created_at))";
+
+type InboxNestedUser = {
+  id: number;
+  user: string;
+  users_documents:
+    | { selfie_url: string | null }
+    | { selfie_url: string | null }[]
+    | null;
+  digital_contracts:
+    | { hoja_vida_data: Record<string, unknown>; created_at: string }
+    | { hoja_vida_data: Record<string, unknown>; created_at: string }[]
+    | null;
+};
+
+function inboxClientFromUser(
+  usersRaw: InboxNestedUser | InboxNestedUser[] | null | undefined,
+  fallbackUserId: number,
+  nameFallback?: string | null,
+  celularFallback?: string | null,
+): Pick<
+  InboxListItem,
+  "username" | "displayName" | "cedula" | "celular" | "selfieUrl"
+> {
+  const users = Array.isArray(usersRaw) ? usersRaw[0] : usersRaw;
+  const cedula = users?.user ? String(users.user) : null;
+
+  const docsRaw = users?.users_documents;
+  const doc = Array.isArray(docsRaw) ? docsRaw[0] : docsRaw;
+  const selfieUrl = doc?.selfie_url ? String(doc.selfie_url) : null;
+
+  const contractsRaw = users?.digital_contracts;
+  const contracts = Array.isArray(contractsRaw)
+    ? contractsRaw
+    : contractsRaw
+      ? [contractsRaw]
+      : [];
+  const latest = [...contracts].sort(
+    (a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  )[0];
+  const hoja = latest?.hoja_vida_data ?? {};
+  const nombre = String(hoja.nombre_completo ?? "").trim();
+  const celularHoja = String(hoja.celular ?? "").trim();
+  const celular =
+    celularHoja ||
+    (celularFallback?.trim() ? celularFallback.trim() : null);
+
+  return {
+    username: cedula ?? `#${fallbackUserId}`,
+    displayName:
+      nombre ||
+      nameFallback?.trim() ||
+      cedula ||
+      `Cliente ${fallbackUserId}`,
+    cedula,
+    celular,
+    selfieUrl,
+  };
+}
+
+function inboxBikeImage(
+  bikeRaw:
+    | { imagen_url: string | null }
+    | { imagen_url: string | null }[]
+    | null
+    | undefined,
+): string | null {
+  const bike = Array.isArray(bikeRaw) ? bikeRaw[0] : bikeRaw;
+  return bike?.imagen_url ? String(bike.imagen_url) : null;
+}
+
 export async function getClientPipeline(
   userId: number,
 ): Promise<ClientPipeline | null> {
@@ -595,11 +669,15 @@ export async function getInboxListItems(
         const nombreHoja = String(
           contract?.hoja_vida_data?.nombre_completo ?? "",
         ).trim();
+        const celularHoja = String(
+          contract?.hoja_vida_data?.celular ?? "",
+        ).trim();
         items.push({
           userId: uid,
           username: cedula ?? `#${uid}`,
           displayName: nombreHoja || cedula || `Cliente ${uid}`,
           cedula,
+          celular: celularHoja || null,
           selfieUrl: (row.selfie_url as string | null) ?? null,
           createdAt: row.created_at as string,
           estadoSolicitud: row.estado_solicitud as string,
@@ -621,19 +699,22 @@ export async function getInboxListItems(
           : "asignada";
       const { data } = await supabase
         .from("visitas")
-        .select("user_id, cliente_nombre, created_at, users(id, user)")
+        .select(
+          `user_id, cliente_nombre, cliente_celular, created_at, ${INBOX_USER_SELECT}`,
+        )
         .eq("estado", estado)
         .order("created_at", { ascending: true });
 
       return (data ?? []).map((row) => {
-        const users = joinUser(row.users);
+        const client = inboxClientFromUser(
+          row.users as InboxNestedUser | InboxNestedUser[] | null,
+          row.user_id as number,
+          row.cliente_nombre as string | null,
+          row.cliente_celular as string | null,
+        );
         return {
           userId: row.user_id as number,
-          username: users?.user ?? `#${row.user_id}`,
-          displayName:
-            (row.cliente_nombre as string | null) ??
-            users?.user ??
-            `Cliente ${row.user_id}`,
+          ...client,
           subtitle:
             queueId === "visitas_sin_asignar"
               ? "Visita sin asignar"
@@ -645,7 +726,9 @@ export async function getInboxListItems(
     case "pagos": {
       const { data } = await supabase
         .from("user_moto_compra")
-        .select("user_id, modelo, color, users(id, user)")
+        .select(
+          `user_id, modelo, color, placa, bike_table(imagen_url), ${INBOX_USER_SELECT}`,
+        )
         .eq("estado", "pendiente_pago")
         .or(
           "pago_inicial_confirmado.eq.false,pago_cuota_confirmado.eq.false",
@@ -653,11 +736,19 @@ export async function getInboxListItems(
         .order("seleccionado_at", { ascending: true });
 
       return (data ?? []).map((row) => {
-        const users = joinUser(row.users);
+        const client = inboxClientFromUser(
+          row.users as InboxNestedUser | InboxNestedUser[] | null,
+          row.user_id as number,
+        );
         return {
           userId: row.user_id as number,
-          username: users?.user ?? `#${row.user_id}`,
-          displayName: users?.user ?? `Cliente ${row.user_id}`,
+          ...client,
+          motoImagenUrl: inboxBikeImage(
+            row.bike_table as
+              | { imagen_url: string | null }
+              | { imagen_url: string | null }[]
+              | null,
+          ),
           subtitle: `${row.modelo} · ${row.color}`,
           queueId,
         };
@@ -666,17 +757,27 @@ export async function getInboxListItems(
     case "retiro": {
       const { data } = await supabase
         .from("user_moto_compra")
-        .select("user_id, modelo, color, users(id, user)")
+        .select(
+          `user_id, modelo, color, placa, bike_table(imagen_url), ${INBOX_USER_SELECT}`,
+        )
         .eq("estado", "lista_retiro")
         .is("placa", null)
         .order("updated_at", { ascending: true });
 
       return (data ?? []).map((row) => {
-        const users = joinUser(row.users);
+        const client = inboxClientFromUser(
+          row.users as InboxNestedUser | InboxNestedUser[] | null,
+          row.user_id as number,
+        );
         return {
           userId: row.user_id as number,
-          username: users?.user ?? `#${row.user_id}`,
-          displayName: users?.user ?? `Cliente ${row.user_id}`,
+          ...client,
+          motoImagenUrl: inboxBikeImage(
+            row.bike_table as
+              | { imagen_url: string | null }
+              | { imagen_url: string | null }[]
+              | null,
+          ),
           subtitle: `${row.modelo} · Falta placa`,
           queueId,
         };
@@ -685,17 +786,27 @@ export async function getInboxListItems(
     case "entrega": {
       const { data } = await supabase
         .from("user_moto_compra")
-        .select("user_id, modelo, color, placa, users(id, user)")
+        .select(
+          `user_id, modelo, color, placa, bike_table(imagen_url), ${INBOX_USER_SELECT}`,
+        )
         .eq("estado", "lista_retiro")
         .not("placa", "is", null)
         .order("updated_at", { ascending: true });
 
       return (data ?? []).map((row) => {
-        const users = joinUser(row.users);
+        const client = inboxClientFromUser(
+          row.users as InboxNestedUser | InboxNestedUser[] | null,
+          row.user_id as number,
+        );
         return {
           userId: row.user_id as number,
-          username: users?.user ?? `#${row.user_id}`,
-          displayName: users?.user ?? `Cliente ${row.user_id}`,
+          ...client,
+          motoImagenUrl: inboxBikeImage(
+            row.bike_table as
+              | { imagen_url: string | null }
+              | { imagen_url: string | null }[]
+              | null,
+          ),
           subtitle: `${row.modelo} · Placa ${row.placa}`,
           queueId,
         };
@@ -705,7 +816,7 @@ export async function getInboxListItems(
       const { data } = await supabase
         .from("morosos")
         .select(
-          "user_id, dias_atraso, monto_adeudado, users(id, user), user_moto_compra(modelo, color, placa)",
+          `user_id, dias_atraso, monto_adeudado, ${INBOX_USER_SELECT}, user_moto_compra(modelo, color, placa, bike_table(imagen_url))`,
         )
         .eq("estado", "activo")
         .gte("dias_atraso", DIAS_MORA_BANDEJA)
@@ -713,16 +824,35 @@ export async function getInboxListItems(
         .order("dias_atraso", { ascending: false });
 
       return (data ?? []).map((row) => {
-        const users = joinUser(row.users);
-        const compra = row.user_moto_compra as {
-          modelo?: string;
-          color?: string;
-          placa?: string | null;
-        } | null;
+        const client = inboxClientFromUser(
+          row.users as InboxNestedUser | InboxNestedUser[] | null,
+          row.user_id as number,
+        );
+        const compraRaw = row.user_moto_compra as
+          | {
+              modelo?: string;
+              color?: string;
+              placa?: string | null;
+              bike_table?:
+                | { imagen_url: string | null }
+                | { imagen_url: string | null }[]
+                | null;
+            }
+          | {
+              modelo?: string;
+              color?: string;
+              placa?: string | null;
+              bike_table?:
+                | { imagen_url: string | null }
+                | { imagen_url: string | null }[]
+                | null;
+            }[]
+          | null;
+        const compra = Array.isArray(compraRaw) ? compraRaw[0] : compraRaw;
         return {
           userId: row.user_id as number,
-          username: users?.user ?? `#${row.user_id}`,
-          displayName: users?.user ?? `Cliente ${row.user_id}`,
+          ...client,
+          motoImagenUrl: inboxBikeImage(compra?.bike_table),
           subtitle: `${compra?.modelo ?? "Moto"} · ${row.dias_atraso} días · ${formatCop(row.monto_adeudado)} · ${compra?.placa ?? "sin placa"}`,
           queueId,
         };
@@ -732,22 +862,41 @@ export async function getInboxListItems(
       const { data } = await supabase
         .from("motos_para_recoger")
         .select(
-          "user_id, dias_atraso, monto_adeudado, users(id, user), user_moto_compra(modelo, color, placa)",
+          `user_id, dias_atraso, monto_adeudado, ${INBOX_USER_SELECT}, user_moto_compra(modelo, color, placa, bike_table(imagen_url))`,
         )
         .eq("estado", "pendiente")
         .order("fecha_ingreso", { ascending: true });
 
       return (data ?? []).map((row) => {
-        const users = joinUser(row.users);
-        const compra = row.user_moto_compra as {
-          modelo?: string;
-          color?: string;
-          placa?: string | null;
-        } | null;
+        const client = inboxClientFromUser(
+          row.users as InboxNestedUser | InboxNestedUser[] | null,
+          row.user_id as number,
+        );
+        const compraRaw = row.user_moto_compra as
+          | {
+              modelo?: string;
+              color?: string;
+              placa?: string | null;
+              bike_table?:
+                | { imagen_url: string | null }
+                | { imagen_url: string | null }[]
+                | null;
+            }
+          | {
+              modelo?: string;
+              color?: string;
+              placa?: string | null;
+              bike_table?:
+                | { imagen_url: string | null }
+                | { imagen_url: string | null }[]
+                | null;
+            }[]
+          | null;
+        const compra = Array.isArray(compraRaw) ? compraRaw[0] : compraRaw;
         return {
           userId: row.user_id as number,
-          username: users?.user ?? `#${row.user_id}`,
-          displayName: users?.user ?? `Cliente ${row.user_id}`,
+          ...client,
+          motoImagenUrl: inboxBikeImage(compra?.bike_table),
           subtitle: `Recoger ${compra?.modelo ?? "moto"} · ${row.dias_atraso} días · ${formatCop(row.monto_adeudado)}`,
           queueId,
         };
@@ -757,17 +906,35 @@ export async function getInboxListItems(
       const { data } = await supabase
         .from("solicitudes_taller")
         .select(
-          "id, user_id, tipo, estado, total_estimado, created_at, users(id, user), user_moto_compra(modelo, placa)",
+          `id, user_id, tipo, estado, total_estimado, created_at, ${INBOX_USER_SELECT}, user_moto_compra(modelo, placa, bike_table(imagen_url))`,
         )
         .eq("estado", "pendiente")
         .order("created_at", { ascending: true });
 
       return (data ?? []).map((row) => {
-        const users = joinUser(row.users);
-        const compra = row.user_moto_compra as {
-          modelo?: string;
-          placa?: string | null;
-        } | null;
+        const client = inboxClientFromUser(
+          row.users as InboxNestedUser | InboxNestedUser[] | null,
+          row.user_id as number,
+        );
+        const compraRaw = row.user_moto_compra as
+          | {
+              modelo?: string;
+              placa?: string | null;
+              bike_table?:
+                | { imagen_url: string | null }
+                | { imagen_url: string | null }[]
+                | null;
+            }
+          | {
+              modelo?: string;
+              placa?: string | null;
+              bike_table?:
+                | { imagen_url: string | null }
+                | { imagen_url: string | null }[]
+                | null;
+            }[]
+          | null;
+        const compra = Array.isArray(compraRaw) ? compraRaw[0] : compraRaw;
         const tipoLabel =
           row.tipo === "repuestos"
             ? "Repuestos"
@@ -776,8 +943,8 @@ export async function getInboxListItems(
               : "Cambio aceite";
         return {
           userId: row.user_id as number,
-          username: users?.user ?? `#${row.user_id}`,
-          displayName: users?.user ?? `Cliente ${row.user_id}`,
+          ...client,
+          motoImagenUrl: inboxBikeImage(compra?.bike_table),
           subtitle: `${tipoLabel} · ${compra?.modelo ?? "Moto"}`,
           queueId,
         };

@@ -42,6 +42,7 @@ function matchesCreditosSearch(item: InboxListItem, query: string): boolean {
   const haystack = [
     item.displayName,
     item.cedula,
+    item.celular,
     item.username,
   ]
     .filter(Boolean)
@@ -124,7 +125,7 @@ export function InboxQueueList({ items, queueId }: InboxQueueListProps) {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nombre o cédula…"
+              placeholder="Buscar por nombre, cédula o celular…"
               className="min-h-11 pl-9"
             />
           </div>
@@ -155,23 +156,41 @@ export function InboxQueueList({ items, queueId }: InboxQueueListProps) {
               className="flex min-w-0 flex-1 flex-col gap-2 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="flex min-w-0 items-center gap-3">
-                {isCreditos ? (
-                  <Avatar size="lg" className="size-12 shrink-0">
+                <div className="flex shrink-0 items-center gap-2">
+                  <Avatar className="!size-20 shrink-0 after:rounded-full sm:!size-24">
                     {item.selfieUrl ? (
                       <AvatarImage
                         src={item.selfieUrl}
                         alt={`Selfie de ${item.displayName}`}
                       />
                     ) : null}
-                    <AvatarFallback>{initials(item.displayName)}</AvatarFallback>
+                    <AvatarFallback className="text-base">
+                      {initials(item.displayName)}
+                    </AvatarFallback>
                   </Avatar>
-                ) : null}
+                  {item.motoImagenUrl ? (
+                    <Avatar className="!size-20 shrink-0 rounded-lg after:rounded-lg sm:!size-24">
+                      <AvatarImage
+                        src={item.motoImagenUrl}
+                        alt={`Moto de ${item.displayName}`}
+                        className="rounded-lg object-cover"
+                      />
+                      <AvatarFallback className="rounded-lg text-xs">
+                        Moto
+                      </AvatarFallback>
+                    </Avatar>
+                  ) : null}
+                </div>
                 <div className="min-w-0">
                   <p className="font-medium">{item.displayName}</p>
                   <p className="truncate text-sm text-muted-foreground">
-                    {isCreditos && item.cedula
-                      ? `C.C. ${item.cedula} · ${item.subtitle}`
-                      : `@${item.username} · ${item.subtitle}`}
+                    {[
+                      item.cedula ? `C.C. ${item.cedula}` : null,
+                      item.celular || null,
+                      item.subtitle,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || `@${item.username}`}
                   </p>
                 </div>
               </div>

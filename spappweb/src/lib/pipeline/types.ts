@@ -411,7 +411,9 @@ export interface InboxListItem {
   subtitle: string;
   queueId: InboxQueueId;
   cedula?: string | null;
+  celular?: string | null;
   selfieUrl?: string | null;
+  motoImagenUrl?: string | null;
   createdAt?: string;
   estadoSolicitud?: string;
   referralSource?: string | null;
