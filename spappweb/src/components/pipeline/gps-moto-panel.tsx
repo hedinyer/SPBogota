@@ -242,9 +242,19 @@ export function GpsMotoPanel({ placa, userId }: GpsMotoPanelProps) {
             </div>
 
             <div className="text-xs text-muted-foreground">
-              <p className="truncate" title={gps.nombreDispositivo}>
-                {gps.nombreDispositivo}
+              <p className="truncate font-medium text-foreground">
+                {placa.toUpperCase()}
               </p>
+              {gps.nombreDispositivo &&
+              gps.nombreDispositivo.trim().toUpperCase().replace(/[\s-]/g, "") !==
+                placa.trim().toUpperCase().replace(/[\s-]/g, "") ? (
+                <p
+                  className="truncate text-muted-foreground"
+                  title={gps.nombreDispositivo}
+                >
+                  GPS: {gps.nombreDispositivo}
+                </p>
+              ) : null}
               <p className="mt-1 tabular-nums">
                 Última: {gps.time}
                 {enVivo

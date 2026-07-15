@@ -1,3 +1,4 @@
+import { runPlacaGpsSelfCheck } from "@/lib/gps/placaGps";
 import type {
   ClientPipeline,
   ContractStatus,
@@ -375,6 +376,8 @@ export function visitaEstadoLabel(estado: VisitaEstado | undefined): string {
 }
 
 export function runPipelineSelfCheck(): void {
+  runPlacaGpsSelfCheck();
+
   const docAceptada = { estado_solicitud: "aceptada" } as UserDocumentRow;
   const contractFirmado = { status: "firmado" } as DigitalContractRow;
   const compraLista: UserMotoCompraRow = {

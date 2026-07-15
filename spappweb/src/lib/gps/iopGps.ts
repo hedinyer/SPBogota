@@ -394,10 +394,14 @@ async function buscarPorPlaca(
   placa: string,
   opciones?: OpcionesCargaIop,
 ): Promise<UbicacionGpsMoto | null> {
-  const claves = variantesPlaca(placa);
-  if (!claves.length) return null;
+  const exacta = normalizarPlaca(placa);
+  if (!exacta) return null;
   const { porPlaca } = await cargarDispositivos(opciones);
-  for (const clave of claves) {
+  const hitExacto = porPlaca.get(exacta);
+  if (hitExacto) return hitExacto;
+  // Solo fallback H histórico (ABC12 ↔ ABC12H); nunca otra letra final.
+  for (const clave of variantesPlaca(placa)) {
+    if (clave === exacta) continue;
     const hit = porPlaca.get(clave);
     if (hit) return hit;
   }
