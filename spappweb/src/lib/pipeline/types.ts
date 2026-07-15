@@ -73,6 +73,8 @@ export interface UserDocumentRow {
   document_back_url: string | null;
   selfie_url: string | null;
   ubicacion_solicitud: SolicitudUbicacion | null;
+  /** Quién captó la solicitud (p. ej. guillen, yhosmer). */
+  referral_source: string | null;
   hora_actualizacion: string | null;
   created_at: string;
 }
@@ -409,6 +411,7 @@ export interface InboxListItem {
   selfieUrl?: string | null;
   createdAt?: string;
   estadoSolicitud?: string;
+  referralSource?: string | null;
 }
 
 export interface ClienteFacturacion {

@@ -14,6 +14,7 @@ import {
   isHojaVidaComplete,
 } from "@/lib/contracts/hoja-vida-validation";
 import type { DigitalContractRow } from "@/lib/pipeline/types";
+import { parseReferralSource } from "@/lib/referrals";
 
 const cedulaSchema = z
   .string()
@@ -27,6 +28,7 @@ const submitApplicationSchema = z.object({
   documentBackUrl: z.string().url(),
   selfieUrl: z.string().url(),
   hojaVida: hojaVidaFormSchema,
+  referralSource: z.string().optional().nullable(),
 });
 
 async function ensureUserByCedula(
@@ -93,6 +95,7 @@ export async function submitPublicApplication(
 ) {
   const parsed = submitApplicationSchema.parse(input);
   const hojaVida = parsed.hojaVida;
+  const referralSource = parseReferralSource(parsed.referralSource);
 
   if (!isHojaVidaComplete(hojaVida)) {
     throw new Error("Completa todos los campos de la hoja de vida.");
@@ -104,7 +107,7 @@ export async function submitPublicApplication(
 
   const { data: latestDoc } = await supabase
     .from("users_documents")
-    .select("id, estado_solicitud, betado")
+    .select("id, estado_solicitud, betado, referral_source")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -118,9 +121,15 @@ export async function submitPublicApplication(
   };
 
   if (latestDoc?.estado_solicitud === "pendiente") {
+    // First-touch: no pisar una atribución ya guardada.
+    const updatePayload =
+      referralSource && !latestDoc.referral_source
+        ? { ...docPayload, referral_source: referralSource }
+        : docPayload;
+
     const { error: updateError } = await supabase
       .from("users_documents")
-      .update(docPayload)
+      .update(updatePayload)
       .eq("id", latestDoc.id);
 
     if (updateError) throw new Error(updateError.message);
@@ -163,6 +172,7 @@ export async function submitPublicApplication(
     .insert({
       user_id: userId,
       ...docPayload,
+      ...(referralSource ? { referral_source: referralSource } : {}),
       estado_solicitud: "pendiente",
       betado: false,
     })

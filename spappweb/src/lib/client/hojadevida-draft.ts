@@ -16,6 +16,7 @@ export type HojadevidaApplicationDraft = {
   form?: HojaVidaFormData;
   formStepIndex?: number;
   resumeStep?: "photos" | "hoja";
+  referralSource?: string | null;
 };
 
 export function readHojadevidaDraft(): HojadevidaApplicationDraft | null {

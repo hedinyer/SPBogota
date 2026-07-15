@@ -31,16 +31,24 @@ import {
   writeHojadevidaDraft,
   type HojadevidaPhotoUrls,
 } from "@/lib/client/hojadevida-draft";
+import { parseReferralSource } from "@/lib/referrals";
 
 type Step = "welcome" | "photos" | "uploading" | "hoja" | "sending" | "success";
 
-export function PublicApplicationFlow() {
+export function PublicApplicationFlow({
+  initialReferralSource = null,
+}: {
+  initialReferralSource?: string | null;
+} = {}) {
   const uploadFolder = useMemo(() => getStableUploadFolder(), []);
   const [step, setStep] = useState<Step>("welcome");
   const [photoUrls, setPhotoUrls] = useState<HojadevidaPhotoUrls | null>(null);
   const [pending, startTransition] = useTransition();
   const [restoredForm, setRestoredForm] = useState<HojaVidaFormData | undefined>();
   const [restoredFormStep, setRestoredFormStep] = useState<number | undefined>();
+  const [referralSource, setReferralSource] = useState<string | null>(() =>
+    parseReferralSource(initialReferralSource),
+  );
 
   const phase: FlowPhase =
     step === "welcome" || step === "photos" || step === "uploading"
@@ -51,13 +59,29 @@ export function PublicApplicationFlow() {
 
   useEffect(() => {
     const draft = readHojadevidaDraft();
+    const fromUrl = parseReferralSource(initialReferralSource);
+    const referral =
+      fromUrl ?? parseReferralSource(draft?.referralSource) ?? null;
+
+    if (referral) {
+      setReferralSource(referral);
+      writeHojadevidaDraft({
+        uploadFolder: draft?.uploadFolder ?? uploadFolder,
+        photoUrls: draft?.photoUrls,
+        form: draft?.form,
+        formStepIndex: draft?.formStepIndex,
+        resumeStep: draft?.resumeStep,
+        referralSource: referral,
+      });
+    }
+
     if (!draft?.resumeStep || !draft.photoUrls) return;
 
     setPhotoUrls(draft.photoUrls);
     if (draft.form) setRestoredForm(draft.form);
     if (draft.formStepIndex != null) setRestoredFormStep(draft.formStepIndex);
     setStep(draft.resumeStep === "hoja" ? "hoja" : "photos");
-  }, []);
+  }, [initialReferralSource, uploadFolder]);
 
   useEffect(() => {
     if (step !== "success") return;
@@ -86,6 +110,7 @@ export function PublicApplicationFlow() {
       form: HojaVidaFormData;
       formStepIndex: number;
       resumeStep: "photos" | "hoja";
+      referralSource: string | null;
     }>,
   ) {
     const prev = readHojadevidaDraft();
@@ -95,6 +120,10 @@ export function PublicApplicationFlow() {
       form: partial.form ?? prev?.form,
       formStepIndex: partial.formStepIndex ?? prev?.formStepIndex,
       resumeStep: partial.resumeStep ?? prev?.resumeStep ?? "hoja",
+      referralSource:
+        partial.referralSource !== undefined
+          ? partial.referralSource
+          : (prev?.referralSource ?? referralSource),
     });
   }
 
@@ -182,6 +211,7 @@ export function PublicApplicationFlow() {
               documentBackUrl: photoUrls.documentBackUrl,
               selfieUrl: photoUrls.selfieUrl,
               hojaVida: form,
+              referralSource,
             }),
           {
             onRetry: () => {

@@ -49,6 +49,11 @@ import {
   mergeRentingResumenWithAtraso,
 } from "@/lib/pipeline/mora-utils";
 import { formatCop } from "@/lib/utils/format";
+import {
+  buildReferralLeaderboard,
+  referralLabel,
+  type ReferralLeaderboardRow,
+} from "@/lib/referrals";
 
 function normalizeVisita(raw: unknown): VisitaRow | null {
   if (!raw) return null;
@@ -90,7 +95,7 @@ export async function getClientPipeline(
   const { data: document } = await supabase
     .from("users_documents")
     .select(
-      "id, user_id, estado_solicitud, betado, motivo_rechazo, document_front_url, document_back_url, selfie_url, ubicacion_solicitud, hora_actualizacion, created_at",
+      "id, user_id, estado_solicitud, betado, motivo_rechazo, document_front_url, document_back_url, selfie_url, ubicacion_solicitud, referral_source, hora_actualizacion, created_at",
     )
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
@@ -420,11 +425,20 @@ async function clientUserIdsWithoutVisita(
   return [...ids];
 }
 
-function sinVisitaSubtitle(estado: string): string {
-  if (estado === "aceptada") return "Crédito aprobado · sin visita";
-  if (estado === "rechazada") return "Crédito rechazado · sin visita";
-  return "Solicitud pendiente · sin visita";
+function sinVisitaSubtitle(
+  estado: string,
+  referralSource?: string | null,
+): string {
+  const base =
+    estado === "aceptada"
+      ? "Crédito aprobado · sin visita"
+      : estado === "rechazada"
+        ? "Crédito rechazado · sin visita"
+        : "Solicitud pendiente · sin visita";
+  const label = referralLabel(referralSource);
+  return label ? `${base} · ${label}` : base;
 }
+
 
 export async function getInboxQueues(): Promise<InboxQueue[]> {
   const supabase = createAdminClient();
@@ -547,22 +561,25 @@ export async function getInboxListItems(
 
   switch (queueId) {
     case "creditos": {
-      const [{ data }, { data: visitas }] = await Promise.all([
+      const [docsRes, visitasRes] = await Promise.all([
         supabase
           .from("users_documents")
           .select(
-            "user_id, estado_solicitud, created_at, selfie_url, users(id, user), digital_contracts(hoja_vida_data)",
+            "user_id, estado_solicitud, created_at, selfie_url, referral_source, users(id, user), digital_contracts(hoja_vida_data)",
           )
           .order("created_at", { ascending: false }),
         supabase.from("visitas").select("user_id"),
       ]);
 
+      if (docsRes.error) throw new Error(docsRes.error.message);
+      if (visitasRes.error) throw new Error(visitasRes.error.message);
+
       const withVisita = new Set(
-        (visitas ?? []).map((v) => v.user_id as number),
+        (visitasRes.data ?? []).map((v) => v.user_id as number),
       );
       const seen = new Set<number>();
       const items: InboxListItem[] = [];
-      for (const row of data ?? []) {
+      for (const row of docsRes.data ?? []) {
         const uid = row.user_id as number;
         if (withVisita.has(uid) || seen.has(uid)) continue;
         seen.add(uid);
@@ -586,7 +603,11 @@ export async function getInboxListItems(
           selfieUrl: (row.selfie_url as string | null) ?? null,
           createdAt: row.created_at as string,
           estadoSolicitud: row.estado_solicitud as string,
-          subtitle: sinVisitaSubtitle(row.estado_solicitud as string),
+          referralSource: (row.referral_source as string | null) ?? null,
+          subtitle: sinVisitaSubtitle(
+            row.estado_solicitud as string,
+            row.referral_source as string | null,
+          ),
           queueId,
         });
       }
@@ -872,6 +893,26 @@ export async function getAllVisitadores(): Promise<VisitadorRow[]> {
     .select("id, nombre, foto_url, telefono, activo, user_id, users(id, user)")
     .order("nombre");
   return ((data ?? []) as unknown as VisitadorRow[]);
+}
+
+export async function getReferralLeaderboard(): Promise<
+  ReferralLeaderboardRow[]
+> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("users_documents")
+    .select("referral_source")
+    .not("referral_source", "is", null);
+
+  if (error) throw new Error(error.message);
+
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    const slug = row.referral_source as string | null;
+    if (!slug) continue;
+    counts[slug] = (counts[slug] ?? 0) + 1;
+  }
+  return buildReferralLeaderboard(counts);
 }
 
 export async function getAllBikes(): Promise<BikeRow[]> {

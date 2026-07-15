@@ -1,17 +1,23 @@
-﻿import { getAllVisitadores } from "@/lib/pipeline/queries";
-import { VisitadoresManager } from "@/components/visitadores/visitadores-manager";
+﻿import {
+  getAllVisitadores,
+  getReferralLeaderboard,
+} from "@/lib/pipeline/queries";
+import { EquipoTabs } from "@/components/equipo/equipo-tabs";
 import { PageHeader } from "@/components/layout/page-header";
 
 export default async function VisitadoresPage() {
-  const visitadores = await getAllVisitadores();
+  const [visitadores, leaderboard] = await Promise.all([
+    getAllVisitadores(),
+    getReferralLeaderboard(),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Visitadores"
-        description="Personas que realizan visitas domiciliarias."
+        title="Equipo"
+        description="Visitadores, vendedores y ranking de captación."
       />
-      <VisitadoresManager visitadores={visitadores} />
+      <EquipoTabs visitadores={visitadores} leaderboard={leaderboard} />
     </div>
   );
 }

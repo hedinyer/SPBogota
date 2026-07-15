@@ -5,6 +5,7 @@ import {
   FRECUENCIA_LABELS,
 } from "@/lib/pipeline/types";
 import { getMoraDisplay, moraEstadoLabel } from "@/lib/pipeline/mora-utils";
+import { referralLabel } from "@/lib/referrals";
 import { formatCop, formatCuotas } from "@/lib/utils/format";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -85,7 +86,8 @@ export function ClientInfoSummary({
     mora.tieneDeuda ||
     pipeline.visita?.direccion_visita ||
     selfieUrl ||
-    motoImagenUrl;
+    motoImagenUrl ||
+    pipeline.document?.referral_source;
 
   if (!hasContent) return null;
 
@@ -110,6 +112,15 @@ export function ClientInfoSummary({
         <div className="grid flex-1 gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3">
           {cedula && <InfoItem label="Cédula" value={cedula} />}
           {celular && <InfoItem label="Celular" value={celular} />}
+          {pipeline.document?.referral_source && (
+            <InfoItem
+              label="Referido por"
+              value={
+                referralLabel(pipeline.document.referral_source) ??
+                pipeline.document.referral_source
+              }
+            />
+          )}
           {compra && (
             <>
               <InfoItem

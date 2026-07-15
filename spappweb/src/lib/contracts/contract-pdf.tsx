@@ -34,6 +34,7 @@ const TIPO_PDF_CODE: Record<string, string> = {
 
 async function publicImage(file: string): Promise<{ data: Buffer; format: "png" | "jpg" }> {
   const data = await readFile(path.join(process.cwd(), "public", file));
+  // ponytail: react-pdf trata jpeg como jpg
   return { data, format: file.endsWith(".png") ? "png" : "jpg" };
 }
 
@@ -148,16 +149,16 @@ function Footer() {
 const BERA_LOGO_FILE = "beralogo.jpg";
 
 function ContratoHeader({
-  garridoLogo,
+  pinillaLogo,
   beraLogo,
 }: {
-  garridoLogo: { data: Buffer; format: "png" | "jpg" };
+  pinillaLogo: { data: Buffer; format: "png" | "jpg" };
   beraLogo: { data: Buffer; format: "png" | "jpg" };
 }) {
   return (
     <View style={styles.headerBand} fixed>
       <View style={styles.headerLogos}>
-        <Image style={styles.headerLogo} src={garridoLogo} />
+        <Image style={styles.headerLogo} src={pinillaLogo} />
         <Image style={styles.headerLogo} src={beraLogo} />
       </View>
       <Text style={styles.headerBrand}>{EMPRESA_PROPIETARIA.razonSocial}</Text>
@@ -288,7 +289,7 @@ export async function generateContratoPdf(args: {
   const doc = (
     <Document>
       <Page size="LETTER" style={styles.pageContrato}>
-        <ContratoHeader garridoLogo={logo} beraLogo={beraLogo} />
+        <ContratoHeader pinillaLogo={logo} beraLogo={beraLogo} />
         <Footer />
         <Text style={styles.titleContrato}>Contrato de Renting</Text>
         <Text style={styles.titleSub}>{e.razonSocial} · {e.ciudad}</Text>
@@ -310,11 +311,11 @@ export async function generateContratoPdf(args: {
         <Text style={styles.firmaIntro}>{renderFirma(contrato)}</Text>
         <View style={styles.firmaRow}>
           <FirmaCol
-            role="El propietario"
+            role="La propietaria"
             sigSrc={firmaProp}
             lines={[
               e.representante,
-              `C.C. ${e.cedula}`,
+              e.cedula,
               "Representante legal",
               e.razonSocial,
               `Nit: ${e.nit}`,
