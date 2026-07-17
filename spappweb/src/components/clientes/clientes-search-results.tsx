@@ -192,6 +192,9 @@ export function ClientesSearchResults({
                         @{client.username}
                         {client.cedula ? ` · C.C. ${client.cedula}` : ""}
                       </p>
+                      <p className="text-sm text-muted-foreground">
+                        Referido por {client.referralLabel}
+                      </p>
                       {(client.placa || client.motoLabel) && (
                         <p className="text-sm text-muted-foreground">
                           {client.placa ? `Placa ${client.placa}` : null}

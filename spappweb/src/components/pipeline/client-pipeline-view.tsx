@@ -128,6 +128,7 @@ export function ClientPipelineView({
               visitadores={visitadores}
               userId={userId}
               compra={pipeline.compra}
+              referralSource={pipeline.document?.referral_source}
             />
           )}
           {pipeline.compra?.estado === "entregada" && (
@@ -198,6 +199,7 @@ export function ClientPipelineView({
                   visitadores={visitadores}
                   userId={userId}
                   compra={pipeline.compra}
+                  referralSource={pipeline.document?.referral_source}
                 />
               )}
             </div>

@@ -1,18 +1,28 @@
 "use client";
 
-import type { ReferralLeaderboardRow } from "@/lib/referrals";
-import type { VisitadorRow } from "@/lib/pipeline/types";
+import type { LeaderboardRow, ReferralLeaderboardRow } from "@/lib/referrals";
+import type {
+  EquipoVisitasDetalle as EquipoVisitasDetalleData,
+  VisitadorRow,
+} from "@/lib/pipeline/types";
 import { EquipoReferralCards } from "@/components/equipo/equipo-referral-cards";
 import { EquipoLeaderboard } from "@/components/equipo/equipo-leaderboard";
+import { EquipoVisitasDetalle } from "@/components/equipo/equipo-visitas-detalle";
 import { VisitadoresManager } from "@/components/visitadores/visitadores-manager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function EquipoTabs({
   visitadores,
   leaderboard,
+  linkLeaderboard,
+  visitasDetalle,
 }: {
   visitadores: VisitadorRow[];
   leaderboard: ReferralLeaderboardRow[];
+  linkLeaderboard: ReferralLeaderboardRow[];
+  visitasDetalle: EquipoVisitasDetalleData & {
+    leaderboard: LeaderboardRow[];
+  };
 }) {
   return (
     <Tabs defaultValue="vendedores">
@@ -51,8 +61,27 @@ export function EquipoTabs({
         <EquipoReferralCards />
       </TabsContent>
 
-      <TabsContent value="metricas" className="flex flex-col gap-4 pt-2">
-        <EquipoLeaderboard rows={leaderboard} />
+      <TabsContent value="metricas" className="flex flex-col gap-12 pt-2">
+        <EquipoLeaderboard
+          rows={leaderboard}
+          emptyMessage="Aún no hay compras a crédito atribuidas."
+          totalLabel={(n) =>
+            `${n} compra${n === 1 ? "" : "s"} a crédito atribuidas`
+          }
+        />
+        <EquipoLeaderboard
+          rows={linkLeaderboard}
+          title="¿Quién trae más clientes usando el link?"
+          emptyMessage="Aún no hay hojas de vida atribuidas."
+          totalLabel={(n) =>
+            `${n} hoja${n === 1 ? "" : "s"} de vida atribuidas`
+          }
+        />
+        <EquipoVisitasDetalle
+          leaderboard={visitasDetalle.leaderboard}
+          asignadas={visitasDetalle.asignadas}
+          completadas={visitasDetalle.completadas}
+        />
       </TabsContent>
     </Tabs>
   );

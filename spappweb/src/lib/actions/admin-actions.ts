@@ -17,6 +17,7 @@ import {
   hojaVidaFormSchema,
   hojaVidaFormToJson,
 } from "@/lib/contracts/hoja-vida-schema";
+import { assertVisitadorAllowedForReferral } from "@/lib/referrals";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage-buckets";
 import { storagePathFromPublicUrl } from "@/lib/utils/storage-urls";
@@ -182,6 +183,31 @@ export async function updateContractHojaVida(
 export async function assignVisit(input: z.infer<typeof assignVisitSchema>) {
   const parsed = assignVisitSchema.parse(input);
   const supabase = await assertAdmin();
+
+  const [{ data: visitador, error: visitadorError }, { data: doc }] =
+    await Promise.all([
+      supabase
+        .from("visitadores")
+        .select("nombre")
+        .eq("id", parsed.visitadorId)
+        .maybeSingle(),
+      supabase
+        .from("users_documents")
+        .select("referral_source")
+        .eq("user_id", parsed.userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  if (visitadorError) throw new Error(visitadorError.message);
+  if (!visitador?.nombre) throw new Error("Visitador no encontrado.");
+
+  assertVisitadorAllowedForReferral(
+    visitador.nombre as string,
+    (doc?.referral_source as string | null | undefined) ?? null,
+  );
+
   const { error } = await supabase
     .from("visitas")
     .update({
@@ -193,18 +219,12 @@ export async function assignVisit(input: z.infer<typeof assignVisitSchema>) {
 
   if (error) throw new Error(error.message);
 
-  const { data: visitador } = await supabase
-    .from("visitadores")
-    .select("nombre")
-    .eq("id", parsed.visitadorId)
-    .maybeSingle();
-
   await emitPipelineEvent({
     userId: parsed.userId,
     kind: "visita_asignada",
     payload: {
       fechaProgramada: parsed.fechaProgramada,
-      visitadorNombre: (visitador?.nombre as string | undefined) ?? null,
+      visitadorNombre: visitador.nombre as string,
     },
   });
 

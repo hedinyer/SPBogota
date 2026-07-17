@@ -17,7 +17,11 @@ export function EquipoReferralCards() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {REFERRAL_SOURCES.map((source) => {
-        const link = hojaVidaUrl(source.slug);
+        // Punto de venta: /hojadevida sin ref (también vale ?ref=punto-de-venta).
+        const link =
+          source.slug === "punto-de-venta"
+            ? hojaVidaUrl()
+            : hojaVidaUrl(source.slug);
 
         function copy() {
           navigator.clipboard
@@ -31,8 +35,9 @@ export function EquipoReferralCards() {
             <CardHeader>
               <CardTitle>{source.label}</CardTitle>
               <CardDescription>
-                Cada hoja de vida por este link queda registrada a su nombre
-                para comisiones.
+                {source.slug === "punto-de-venta"
+                  ? "Link del local: /hojadevida (con o sin ?ref=punto-de-venta)."
+                  : "Cada hoja de vida por este link queda registrada a su nombre para comisiones."}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">

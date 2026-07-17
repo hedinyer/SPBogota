@@ -14,7 +14,7 @@ import {
   isHojaVidaComplete,
 } from "@/lib/contracts/hoja-vida-validation";
 import type { DigitalContractRow } from "@/lib/pipeline/types";
-import { parseReferralSource } from "@/lib/referrals";
+import { resolveReferralSource } from "@/lib/referrals";
 
 const cedulaSchema = z
   .string()
@@ -95,7 +95,7 @@ export async function submitPublicApplication(
 ) {
   const parsed = submitApplicationSchema.parse(input);
   const hojaVida = parsed.hojaVida;
-  const referralSource = parseReferralSource(parsed.referralSource);
+  const referralSource = resolveReferralSource(parsed.referralSource);
 
   if (!isHojaVidaComplete(hojaVida)) {
     throw new Error("Completa todos los campos de la hoja de vida.");
@@ -122,10 +122,9 @@ export async function submitPublicApplication(
 
   if (latestDoc?.estado_solicitud === "pendiente") {
     // First-touch: no pisar una atribución ya guardada.
-    const updatePayload =
-      referralSource && !latestDoc.referral_source
-        ? { ...docPayload, referral_source: referralSource }
-        : docPayload;
+    const updatePayload = !latestDoc.referral_source
+      ? { ...docPayload, referral_source: referralSource }
+      : docPayload;
 
     const { error: updateError } = await supabase
       .from("users_documents")
@@ -172,7 +171,7 @@ export async function submitPublicApplication(
     .insert({
       user_id: userId,
       ...docPayload,
-      ...(referralSource ? { referral_source: referralSource } : {}),
+      referral_source: referralSource,
       estado_solicitud: "pendiente",
       betado: false,
     })

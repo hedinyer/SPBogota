@@ -138,6 +138,21 @@ export interface VisitaRow {
   updated_at: string;
 }
 
+/** Fila de detalle en métricas de Equipo (visitas asignadas/completadas). */
+export interface EquipoVisitaDetalleItem {
+  id: string;
+  userId: number;
+  displayName: string;
+  selfieUrl: string | null;
+  referralLabel: string;
+  visitadorNombre: string | null;
+}
+
+export interface EquipoVisitasDetalle {
+  asignadas: EquipoVisitaDetalleItem[];
+  completadas: EquipoVisitaDetalleItem[];
+}
+
 export interface UserMotoCompraRow {
   id: string;
   user_id: number;
@@ -446,6 +461,8 @@ export interface ClientSearchResult {
   seleccionadoAt: string | null;
   selfieUrl: string | null;
   motoImagenUrl: string | null;
+  /** Quién captó al cliente (Guillen, Punto de venta, …). */
+  referralLabel: string;
 }
 
 export interface BikeRow {

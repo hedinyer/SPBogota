@@ -5,6 +5,11 @@ import { toast } from "sonner";
 import { ExternalLink, MapPin } from "lucide-react";
 import { assignVisit, cancelVisit } from "@/lib/actions/admin-actions";
 import type { VisitaRow, VisitadorRow, UserMotoCompraRow } from "@/lib/pipeline/types";
+import {
+  filterVisitadoresForReferral,
+  referralLabel,
+  resolveReferralSource,
+} from "@/lib/referrals";
 import { formatDate } from "@/lib/utils/format";
 import { visitaEstadoLabel, entregaAntesVisita } from "@/lib/pipeline/step-logic";
 import { Button } from "@/components/ui/button";
@@ -33,6 +38,7 @@ interface VisitActionPanelProps {
   visitadores: VisitadorRow[];
   userId: number;
   compra?: UserMotoCompraRow | null;
+  referralSource?: string | null;
 }
 
 export function VisitActionPanel({
@@ -40,8 +46,16 @@ export function VisitActionPanel({
   visitadores,
   userId,
   compra = null,
+  referralSource = null,
 }: VisitActionPanelProps) {
   const [pending, startTransition] = useTransition();
+  const assignableVisitadores = filterVisitadoresForReferral(
+    visitadores,
+    referralSource,
+  );
+  const referralSlug = resolveReferralSource(referralSource);
+  const lockedReferralLabel =
+    referralSlug === "punto-de-venta" ? null : referralLabel(referralSlug);
 
   if (!visita) {
     return (
@@ -115,10 +129,11 @@ export function VisitActionPanel({
 
         {visita.estado === "pendiente_asignacion" && (
           <AssignForm
-            visitadores={visitadores}
+            visitadores={assignableVisitadores}
             pending={pending}
             visita={visita}
             highlight
+            lockedReferralLabel={lockedReferralLabel}
             onAssign={(visitadorId, fecha) =>
               run(
                 () =>
@@ -187,10 +202,11 @@ export function VisitActionPanel({
               </AlertDialog>
             </div>
             <AssignForm
-              visitadores={visitadores}
+              visitadores={assignableVisitadores}
               pending={pending}
               visita={visita}
               defaultVisitadorId={visita.visitador_id}
+              lockedReferralLabel={lockedReferralLabel}
               title="Reprogramar visita"
               submitLabel="Guardar cambios"
               onAssign={(visitadorId, fecha) =>
@@ -298,11 +314,12 @@ export function VisitActionPanel({
               fecha.
             </p>
             <AssignForm
-              visitadores={visitadores}
+              visitadores={assignableVisitadores}
               pending={pending}
               visita={visita}
               highlight
               defaultVisitadorId={visita.visitador_id}
+              lockedReferralLabel={lockedReferralLabel}
               title="Volver a agendar visita"
               submitLabel="Volver a agendar"
               onAssign={(visitadorId, fecha) =>
@@ -331,6 +348,7 @@ function AssignForm({
   pending,
   highlight = false,
   defaultVisitadorId = null,
+  lockedReferralLabel = null,
   title = "Asignar visitador",
   submitLabel = "Asignar visita",
   onAssign,
@@ -340,13 +358,20 @@ function AssignForm({
   pending: boolean;
   highlight?: boolean;
   defaultVisitadorId?: number | null;
+  lockedReferralLabel?: string | null;
   title?: string;
   submitLabel?: string;
   onAssign: (visitadorId: number, fecha: string) => void;
 }) {
-  const [visitadorId, setVisitadorId] = useState(() =>
-    defaultVisitadorId != null ? String(defaultVisitadorId) : "",
-  );
+  const [visitadorId, setVisitadorId] = useState(() => {
+    if (
+      defaultVisitadorId != null &&
+      visitadores.some((v) => v.id === defaultVisitadorId)
+    ) {
+      return String(defaultVisitadorId);
+    }
+    return visitadores.length === 1 ? String(visitadores[0].id) : "";
+  });
   const [fecha, setFecha] = useState(
     () => visita.fecha_programada?.slice(0, 16) ?? "",
   );
@@ -378,6 +403,12 @@ function AssignForm({
           ? "Programar visita domiciliaria"
           : title}
       </p>
+      {lockedReferralLabel && (
+        <p className="text-sm text-muted-foreground">
+          Cliente referido por {lockedReferralLabel}: la visita solo puede
+          asignarse a {lockedReferralLabel}.
+        </p>
+      )}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
           <Label>Visitador</Label>
@@ -416,7 +447,9 @@ function AssignForm({
       </Button>
       {visitadores.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          Crea visitadores con cuenta de acceso en el menú lateral primero.
+          {lockedReferralLabel
+            ? `No hay un visitador llamado ${lockedReferralLabel}. Créalo en Equipo → Visitadores.`
+            : "Crea visitadores con cuenta de acceso en el menú lateral primero."}
         </p>
       )}
     </form>

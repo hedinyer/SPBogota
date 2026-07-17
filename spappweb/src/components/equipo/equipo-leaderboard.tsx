@@ -1,4 +1,4 @@
-import type { ReferralLeaderboardRow } from "@/lib/referrals";
+import type { LeaderboardRow } from "@/lib/referrals";
 import { cn } from "@/lib/utils";
 
 const PODIUM = [
@@ -22,18 +22,25 @@ const PODIUM = [
   },
 ] as const;
 
-/** Orden visual de podio: 2.º · 1.º · 3.º */
-function podiumOrder(rows: ReferralLeaderboardRow[]) {
-  const byRank = (r: number) => rows.find((row) => row.rank === r) ?? null;
-  return [byRank(2), byRank(1), byRank(3)].filter(
-    (r): r is ReferralLeaderboardRow => r != null,
-  );
+/** Orden visual de podio: 2.º · 1.º · 3.º (top 3 de la lista; soporta empates). */
+function podiumOrder(rows: LeaderboardRow[]) {
+  const [first, second, third] = rows.slice(0, 3);
+  return [second, first, third].filter((r): r is LeaderboardRow => r != null);
 }
 
 export function EquipoLeaderboard({
   rows,
+  title = "¿Quién trae más clientes?",
+  emptyMessage,
+  totalLabel,
+  itemLabel = (n) => (n === 1 ? "cliente" : "clientes"),
 }: {
-  rows: ReferralLeaderboardRow[];
+  rows: LeaderboardRow[];
+  title?: string;
+  emptyMessage: string;
+  /** Texto del total cuando hay al menos 1 (ya pluralizado). */
+  totalLabel: (total: number) => string;
+  itemLabel?: (count: number) => string;
 }) {
   const top = podiumOrder(rows);
   const total = rows.reduce((sum, r) => sum + r.count, 0);
@@ -45,19 +52,19 @@ export function EquipoLeaderboard({
           Leaderboard
         </p>
         <h2 className="mt-2 font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
-          ¿Quién trae más clientes?
+          {title}
         </h2>
         <p className="mt-2 text-muted-foreground">
-          {total === 0
-            ? "Aún no hay captaciones con link de vendedor."
-            : `${total} cliente${total === 1 ? "" : "s"} atribuidos`}
+          {total === 0 ? emptyMessage : totalLabel(total)}
         </p>
       </div>
 
       <div className="flex items-end justify-center gap-3 sm:gap-6">
-        {top.map((row) => {
-          const style = PODIUM.find((p) => p.rank === row.rank) ?? PODIUM[2];
-          const isFirst = row.rank === 1;
+        {top.map((row, i) => {
+          // Slot visual: izq=2.º, centro=1.º, der=3.º (aunque haya empate de rank).
+          const place = (i === 0 ? 2 : i === 1 ? 1 : 3) as 1 | 2 | 3;
+          const style = PODIUM.find((p) => p.rank === place) ?? PODIUM[2];
+          const isFirst = place === 1;
           return (
             <div
               key={row.slug}
@@ -116,8 +123,7 @@ export function EquipoLeaderboard({
               <span className="truncate font-medium">{row.label}</span>
             </div>
             <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
-              {row.count}{" "}
-              {row.count === 1 ? "cliente" : "clientes"}
+              {row.count} {itemLabel(row.count)}
             </span>
           </li>
         ))}

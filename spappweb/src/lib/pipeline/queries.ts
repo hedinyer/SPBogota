@@ -34,6 +34,8 @@ import type {
   UserMotoCompraRow,
   UserRow,
   UserTrackingRow,
+  EquipoVisitaDetalleItem,
+  EquipoVisitasDetalle,
   VisitaRow,
   VisitadorRow,
 } from "@/lib/pipeline/types";
@@ -51,7 +53,10 @@ import {
 import { formatCop } from "@/lib/utils/format";
 import {
   buildReferralLeaderboard,
+  rankLeaderboard,
   referralLabel,
+  resolveReferralSource,
+  type LeaderboardRow,
   type ReferralLeaderboardRow,
 } from "@/lib/referrals";
 
@@ -1066,6 +1071,41 @@ export async function getReferralLeaderboard(): Promise<
   ReferralLeaderboardRow[]
 > {
   const supabase = createAdminClient();
+  // Solo clientes que ya compraron moto a crédito (no solo llenaron la hoja).
+  const { data, error } = await supabase
+    .from("user_moto_compra")
+    .select("users!inner(users_documents(referral_source))")
+    .neq("estado", "cancelada");
+
+  if (error) throw new Error(error.message);
+
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    const user = row.users as {
+      users_documents:
+        | { referral_source: string | null }[]
+        | { referral_source: string | null }
+        | null;
+    } | null;
+    const docs = Array.isArray(user?.users_documents)
+      ? user.users_documents
+      : user?.users_documents
+        ? [user.users_documents]
+        : [];
+    // Sin ref (o null histórico) = punto de venta.
+    const slug = resolveReferralSource(
+      docs.find((d) => d.referral_source)?.referral_source,
+    );
+    counts[slug] = (counts[slug] ?? 0) + 1;
+  }
+  return buildReferralLeaderboard(counts);
+}
+
+/** Ranking por hojas de vida llenadas vía link de captación. */
+export async function getReferralLinkLeaderboard(): Promise<
+  ReferralLeaderboardRow[]
+> {
+  const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("users_documents")
     .select("referral_source")
@@ -1080,6 +1120,148 @@ export async function getReferralLeaderboard(): Promise<
     counts[slug] = (counts[slug] ?? 0) + 1;
   }
   return buildReferralLeaderboard(counts);
+}
+
+/** Visitas asignadas/completadas + ranking de visitadores por completadas. */
+export async function getEquipoVisitasDetalle(): Promise<
+  EquipoVisitasDetalle & { leaderboard: LeaderboardRow[] }
+> {
+  const supabase = createAdminClient();
+  const [{ data, error }, { data: visitadores, error: visitadoresError }] =
+    await Promise.all([
+      supabase
+        .from("visitas")
+        .select(
+          `id, user_id, estado, cliente_nombre, cliente_celular, fecha_programada, fecha_completada, created_at, visitador_id,
+           visitadores(id, nombre),
+           users(id, user, users_documents(selfie_url, referral_source), digital_contracts(hoja_vida_data, created_at))`,
+        )
+        .in("estado", ["asignada", "completada"]),
+      supabase
+        .from("visitadores")
+        .select("id, nombre")
+        .eq("activo", true)
+        .order("nombre"),
+    ]);
+
+  if (error) throw new Error(error.message);
+  if (visitadoresError) throw new Error(visitadoresError.message);
+
+  const completedByVisitador = new Map<
+    string,
+    { label: string; count: number }
+  >();
+  for (const v of visitadores ?? []) {
+    completedByVisitador.set(String(v.id), {
+      label: String(v.nombre),
+      count: 0,
+    });
+  }
+
+  const asignadas: { item: EquipoVisitaDetalleItem; sortAt: number }[] = [];
+  const completadas: { item: EquipoVisitaDetalleItem; sortAt: number }[] = [];
+
+  for (const row of data ?? []) {
+    const usersRaw = row.users as
+      | (InboxNestedUser & {
+          users_documents:
+            | { selfie_url: string | null; referral_source: string | null }
+            | { selfie_url: string | null; referral_source: string | null }[]
+            | null;
+        })
+      | (InboxNestedUser & {
+          users_documents:
+            | { selfie_url: string | null; referral_source: string | null }
+            | { selfie_url: string | null; referral_source: string | null }[]
+            | null;
+        })[]
+      | null;
+
+    const user = Array.isArray(usersRaw) ? usersRaw[0] : usersRaw;
+    const docs = Array.isArray(user?.users_documents)
+      ? user.users_documents
+      : user?.users_documents
+        ? [user.users_documents]
+        : [];
+    const slug = resolveReferralSource(
+      docs.find((d) => d.referral_source)?.referral_source,
+    );
+
+    const client = inboxClientFromUser(
+      user,
+      row.user_id as number,
+      row.cliente_nombre as string | null,
+      row.cliente_celular as string | null,
+    );
+    const visitadorRaw = row.visitadores as
+      | { id: number; nombre: string | null }
+      | { id: number; nombre: string | null }[]
+      | null;
+    const visitador = Array.isArray(visitadorRaw)
+      ? visitadorRaw[0]
+      : visitadorRaw;
+    const visitadorNombre = visitador?.nombre?.trim() || null;
+    const visitadorKey =
+      visitador?.id != null
+        ? String(visitador.id)
+        : row.visitador_id != null
+          ? String(row.visitador_id)
+          : null;
+
+    if (row.estado === "completada" && visitadorKey) {
+      const prev = completedByVisitador.get(visitadorKey);
+      if (prev) {
+        prev.count += 1;
+      } else {
+        completedByVisitador.set(visitadorKey, {
+          label: visitadorNombre ?? `Visitador ${visitadorKey}`,
+          count: 1,
+        });
+      }
+    }
+
+    const item: EquipoVisitaDetalleItem = {
+      id: String(row.id),
+      userId: row.user_id as number,
+      displayName: client.displayName,
+      selfieUrl: client.selfieUrl,
+      referralLabel: referralLabel(slug) ?? slug,
+      visitadorNombre,
+    };
+
+    if (row.estado === "completada") {
+      completadas.push({
+        item,
+        sortAt: new Date(
+          (row.fecha_completada as string | null) ??
+            (row.created_at as string),
+        ).getTime(),
+      });
+    } else {
+      asignadas.push({
+        item,
+        sortAt: new Date(
+          (row.fecha_programada as string | null) ??
+            (row.created_at as string),
+        ).getTime(),
+      });
+    }
+  }
+
+  asignadas.sort((a, b) => a.sortAt - b.sortAt);
+  completadas.sort((a, b) => b.sortAt - a.sortAt);
+
+  return {
+    leaderboard: rankLeaderboard(
+      [...completedByVisitador.entries()].map(([slug, row]) => ({
+        slug,
+        label: row.label,
+        count: row.count,
+      })),
+    ),
+    asignadas: asignadas.map((x) => x.item),
+    completadas: completadas.map((x) => x.item),
+  };
 }
 
 export async function getAllBikes(): Promise<BikeRow[]> {
@@ -1414,7 +1596,7 @@ export async function searchClients(
       supabase
         .from("users")
         .select(
-          "id, user, users_documents(selfie_url), user_moto_compra(id, modelo, color, placa, estado, bike_table(imagen_url)), visitas(cliente_nombre), digital_contracts(hoja_vida_data, contrato_data, created_at)",
+          "id, user, users_documents(selfie_url, referral_source), user_moto_compra(id, modelo, color, placa, estado, bike_table(imagen_url)), visitas(cliente_nombre), digital_contracts(hoja_vida_data, contrato_data, created_at)",
         )
         .in("id", userIds),
       supabase
@@ -1444,8 +1626,8 @@ export async function searchClients(
       id: number;
       user: string;
       users_documents:
-        | { selfie_url: string | null }
-        | { selfie_url: string | null }[]
+        | { selfie_url: string | null; referral_source: string | null }
+        | { selfie_url: string | null; referral_source: string | null }[]
         | null;
       user_moto_compra:
         | {
@@ -1486,7 +1668,8 @@ export async function searchClients(
     const bike = Array.isArray(bikeRaw) ? bikeRaw[0] : bikeRaw;
 
     const docRaw = user.users_documents;
-    const doc = Array.isArray(docRaw) ? docRaw[0] : docRaw;
+    const docs = Array.isArray(docRaw) ? docRaw : docRaw ? [docRaw] : [];
+    const doc = docs[0] ?? null;
 
     const visitaRaw = user.visitas;
     const visita = Array.isArray(visitaRaw) ? visitaRaw[0] : visitaRaw;
@@ -1531,6 +1714,12 @@ export async function searchClients(
       seleccionadoAt: null,
       selfieUrl: doc?.selfie_url ? String(doc.selfie_url) : null,
       motoImagenUrl: bike?.imagen_url ? String(bike.imagen_url) : null,
+      referralLabel:
+        referralLabel(
+          resolveReferralSource(
+            docs.find((d) => d.referral_source)?.referral_source,
+          ),
+        ) ?? "Punto de venta",
     };
   });
 
@@ -1547,7 +1736,7 @@ export async function listClientesMotoCredito(
   const { data: compras, error } = await supabase
     .from("user_moto_compra")
     .select(
-      "id, modelo, color, placa, estado, seleccionado_at, user_id, bike_table(imagen_url), users(id, user, users_documents(selfie_url), visitas(cliente_nombre), digital_contracts(hoja_vida_data, contrato_data, created_at))",
+      "id, modelo, color, placa, estado, seleccionado_at, user_id, bike_table(imagen_url), users(id, user, users_documents(selfie_url, referral_source), visitas(cliente_nombre), digital_contracts(hoja_vida_data, contrato_data, created_at))",
     )
     .neq("estado", "cancelada")
     .order("seleccionado_at", { ascending: false })
@@ -1603,8 +1792,8 @@ export async function listClientesMotoCredito(
             id: number;
             user: string;
             users_documents:
-              | { selfie_url: string | null }
-              | { selfie_url: string | null }[]
+              | { selfie_url: string | null; referral_source: string | null }
+              | { selfie_url: string | null; referral_source: string | null }[]
               | null;
             visitas:
               | { cliente_nombre: string | null }
@@ -1627,8 +1816,8 @@ export async function listClientesMotoCredito(
             id: number;
             user: string;
             users_documents:
-              | { selfie_url: string | null }
-              | { selfie_url: string | null }[]
+              | { selfie_url: string | null; referral_source: string | null }
+              | { selfie_url: string | null; referral_source: string | null }[]
               | null;
             visitas:
               | { cliente_nombre: string | null }
@@ -1667,13 +1856,15 @@ export async function listClientesMotoCredito(
         seleccionadoAt: compra.seleccionado_at,
         selfieUrl: null,
         motoImagenUrl: null,
+        referralLabel: "Punto de venta",
       };
     }
 
     const visitaRaw = user.visitas;
     const visita = Array.isArray(visitaRaw) ? visitaRaw[0] : visitaRaw;
     const docRaw = user.users_documents;
-    const doc = Array.isArray(docRaw) ? docRaw[0] : docRaw;
+    const docs = Array.isArray(docRaw) ? docRaw : docRaw ? [docRaw] : [];
+    const doc = docs[0] ?? null;
     const bikeRaw = compra.bike_table;
     const bike = Array.isArray(bikeRaw) ? bikeRaw[0] : bikeRaw;
 
@@ -1715,6 +1906,12 @@ export async function listClientesMotoCredito(
       seleccionadoAt: compra.seleccionado_at,
       selfieUrl: doc?.selfie_url ? String(doc.selfie_url) : null,
       motoImagenUrl: bike?.imagen_url ? String(bike.imagen_url) : null,
+      referralLabel:
+        referralLabel(
+          resolveReferralSource(
+            docs.find((d) => d.referral_source)?.referral_source,
+          ),
+        ) ?? "Punto de venta",
     };
   });
 
