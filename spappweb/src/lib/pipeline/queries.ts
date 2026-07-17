@@ -1079,14 +1079,17 @@ export async function getReferralLeaderboard(): Promise<
 
   if (error) throw new Error(error.message);
 
+  type UserWithDocs = {
+    users_documents:
+      | { referral_source: string | null }[]
+      | { referral_source: string | null }
+      | null;
+  };
+
   const counts: Record<string, number> = {};
   for (const row of data ?? []) {
-    const user = row.users as {
-      users_documents:
-        | { referral_source: string | null }[]
-        | { referral_source: string | null }
-        | null;
-    } | null;
+    const usersRaw = row.users as UserWithDocs | UserWithDocs[] | null;
+    const user = Array.isArray(usersRaw) ? usersRaw[0] : usersRaw;
     const docs = Array.isArray(user?.users_documents)
       ? user.users_documents
       : user?.users_documents
@@ -1161,20 +1164,20 @@ export async function getEquipoVisitasDetalle(): Promise<
   const asignadas: { item: EquipoVisitaDetalleItem; sortAt: number }[] = [];
   const completadas: { item: EquipoVisitaDetalleItem; sortAt: number }[] = [];
 
+  type VisitaDetalleUser = {
+    id: number;
+    user: string;
+    users_documents:
+      | { selfie_url: string | null; referral_source: string | null }
+      | { selfie_url: string | null; referral_source: string | null }[]
+      | null;
+    digital_contracts: InboxNestedUser["digital_contracts"];
+  };
+
   for (const row of data ?? []) {
-    const usersRaw = row.users as
-      | (InboxNestedUser & {
-          users_documents:
-            | { selfie_url: string | null; referral_source: string | null }
-            | { selfie_url: string | null; referral_source: string | null }[]
-            | null;
-        })
-      | (InboxNestedUser & {
-          users_documents:
-            | { selfie_url: string | null; referral_source: string | null }
-            | { selfie_url: string | null; referral_source: string | null }[]
-            | null;
-        })[]
+    const usersRaw = row.users as unknown as
+      | VisitaDetalleUser
+      | VisitaDetalleUser[]
       | null;
 
     const user = Array.isArray(usersRaw) ? usersRaw[0] : usersRaw;
@@ -1224,7 +1227,7 @@ export async function getEquipoVisitasDetalle(): Promise<
       id: String(row.id),
       userId: row.user_id as number,
       displayName: client.displayName,
-      selfieUrl: client.selfieUrl,
+      selfieUrl: client.selfieUrl ?? null,
       referralLabel: referralLabel(slug) ?? slug,
       visitadorNombre,
     };
