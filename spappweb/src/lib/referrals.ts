@@ -3,6 +3,7 @@ export const REFERRAL_SOURCES = [
   { slug: "punto-de-venta", label: "Punto de venta" },
   { slug: "guillen", label: "Guillen" },
   { slug: "yhosmer", label: "Yhosmer" },
+  { slug: "fabian", label: "Fabian" },
 ] as const;
 
 export type ReferralSlug = (typeof REFERRAL_SOURCES)[number]["slug"];
@@ -53,7 +54,7 @@ export function visitadorMatchesReferral(
   return normalizeVisitadorSlug(visitadorNombre) === referralSlug;
 }
 
-/** Punto de venta → todos; Guillen/Yhosmer → solo el visitador homónimo. */
+/** Punto de venta / Fabian → todos; Guillen/Yhosmer → solo el visitador homónimo. */
 export function filterVisitadoresForReferral<T extends { nombre: string }>(
   visitadores: T[],
   referralSource: string | null | undefined,
