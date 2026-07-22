@@ -11,6 +11,7 @@
     "check:contrato": "node --experimental-strip-types src/lib/contracts/contrato.check.ts",
     "check:pipeline": "node --experimental-strip-types src/lib/pipeline/pipeline.check.ts",
     "check:mora": "node --experimental-strip-types src/lib/pipeline/mora-utils.check.ts",
+    "check:titularidad": "node --experimental-strip-types src/lib/admin/titularidad.check.ts",
     "check:all": "node scripts/check-all.mjs",
     "test:e2e": "playwright test",
     "test": "npm run check:all && npm run test:e2e"

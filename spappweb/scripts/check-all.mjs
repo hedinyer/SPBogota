@@ -9,6 +9,7 @@ const checks = [
   "src/lib/contracts/contrato.check.ts",
   "src/lib/pipeline/pipeline.check.ts",
   "src/lib/pipeline/mora-utils.check.ts",
+  "src/lib/admin/titularidad.check.ts",
 ];
 
 function run(file) {

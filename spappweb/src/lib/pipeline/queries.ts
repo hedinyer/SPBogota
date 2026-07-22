@@ -518,9 +518,17 @@ function sinVisitaSubtitle(
   return label ? `${base} · ${label}` : base;
 }
 
+/** Syncs morosos / motos_para_recoger from vista atrasos (cron alone leaves cancelada stuck). */
+async function ensureMoraSynced(
+  supabase: ReturnType<typeof createAdminClient>,
+): Promise<void> {
+  const { error } = await supabase.rpc("evaluar_mora_diaria");
+  if (error) throw new Error(error.message);
+}
 
 export async function getInboxQueues(): Promise<InboxQueue[]> {
   const supabase = createAdminClient();
+  await ensureMoraSynced(supabase);
 
   const [
     creditosIds,
@@ -637,6 +645,9 @@ export async function getInboxListItems(
   queueId: InboxQueueId,
 ): Promise<InboxListItem[]> {
   const supabase = createAdminClient();
+  if (queueId === "morosos" || queueId === "recoger") {
+    await ensureMoraSynced(supabase);
+  }
 
   switch (queueId) {
     case "creditos": {

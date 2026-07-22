@@ -1,4 +1,5 @@
 ﻿import { Bike, User } from "lucide-react";
+import { parseTitularidadHistorial } from "@/lib/admin/titularidad";
 import type { BikeRow, ClientPipeline } from "@/lib/pipeline/types";
 import {
   COMPRA_ESTADO_LABELS,
@@ -91,107 +92,140 @@ export function ClientInfoSummary({
     pipeline.document?.referral_source;
 
   const placaGps = compra?.placa?.trim() || null;
+  const titularidadHistorial = parseTitularidadHistorial(
+    (compra?.admin_data as Record<string, unknown> | undefined) ?? null,
+  );
   if (!hasContent && !placaGps) return null;
 
   return (
     <Card className="overflow-hidden border-border shadow-none">
-      <CardContent className="flex flex-col gap-0 p-0 lg:flex-row">
-        <div className="flex min-w-0 flex-1 flex-col sm:flex-row">
-          <div className="grid w-full shrink-0 grid-cols-2 gap-0 border-b border-border sm:w-56 sm:grid-cols-1 sm:border-b-0 sm:border-r">
-            <PhotoThumb
-              src={selfieUrl}
-              alt={`Foto de ${pipeline.displayName}`}
-              fallback="user"
-              caption="Cliente"
-            />
-            <PhotoThumb
-              src={motoImagenUrl}
-              alt={compra ? `Moto ${compra.modelo}` : "Moto"}
-              fallback="bike"
-              caption={compra?.placa ?? "Moto"}
-            />
+      <CardContent className="flex flex-col gap-0 p-0">
+        <div className="flex flex-col gap-0 lg:flex-row">
+          <div className="flex min-w-0 flex-1 flex-col sm:flex-row">
+            <div className="grid w-full shrink-0 grid-cols-2 gap-0 border-b border-border sm:w-56 sm:grid-cols-1 sm:border-b-0 sm:border-r">
+              <PhotoThumb
+                src={selfieUrl}
+                alt={`Foto de ${pipeline.displayName}`}
+                fallback="user"
+                caption="Cliente"
+              />
+              <PhotoThumb
+                src={motoImagenUrl}
+                alt={compra ? `Moto ${compra.modelo}` : "Moto"}
+                fallback="bike"
+                caption={compra?.placa ?? "Moto"}
+              />
+            </div>
+
+            <div className="grid flex-1 gap-4 p-6 sm:grid-cols-2">
+              {cedula && <InfoItem label="Cédula" value={cedula} />}
+              {celular && <InfoItem label="Celular" value={celular} />}
+              {pipeline.document?.referral_source && (
+                <InfoItem
+                  label="Referido por"
+                  value={
+                    referralLabel(pipeline.document.referral_source) ??
+                    pipeline.document.referral_source
+                  }
+                />
+              )}
+              {compra && (
+                <>
+                  <InfoItem
+                    label="Moto"
+                    value={`${compra.modelo} · ${compra.color}`}
+                  />
+                  {compra.placa && (
+                    <InfoItem label="Placa" value={compra.placa} />
+                  )}
+                  <InfoItem
+                    label="Estado compra"
+                    value={COMPRA_ESTADO_LABELS[compra.estado]}
+                  />
+                  {compra.estado !== "cancelada" && (
+                    <InfoItem
+                      label="Frecuencia de pago"
+                      value={FRECUENCIA_LABELS[compra.frecuencia_pago]}
+                    />
+                  )}
+                </>
+              )}
+              {pipeline.visita?.direccion_visita && (
+                <InfoItem
+                  label="Dirección"
+                  value={pipeline.visita.direccion_visita}
+                />
+              )}
+              {mora.tieneDeuda && compra?.estado === "entregada" && (
+                <>
+                  <InfoItem
+                    label="Estado de pagos"
+                    value={moraEstadoLabel(pipeline.atraso)}
+                  />
+                  <InfoItem
+                    label="Días de atraso"
+                    value={mora.dias > 0 ? String(mora.dias) : "—"}
+                  />
+                  <InfoItem label="Adeudado" value={formatCop(mora.monto)} />
+                </>
+              )}
+              {resumen && (
+                <>
+                  <InfoItem
+                    label="Cuotas pagadas"
+                    value={formatCuotas(resumen.cuotasPagadas)}
+                  />
+                  <InfoItem
+                    label="Total pagado"
+                    value={formatCop(resumen.totalPagado)}
+                  />
+                  {resumen.totalAdeudado > 0 && (
+                    <InfoItem
+                      label="Adeudado"
+                      value={formatCop(resumen.totalAdeudado)}
+                    />
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
-          <div className="grid flex-1 gap-4 p-6 sm:grid-cols-2">
-            {cedula && <InfoItem label="Cédula" value={cedula} />}
-            {celular && <InfoItem label="Celular" value={celular} />}
-            {pipeline.document?.referral_source && (
-              <InfoItem
-                label="Referido por"
-                value={
-                  referralLabel(pipeline.document.referral_source) ??
-                  pipeline.document.referral_source
-                }
+          {placaGps ? (
+            <div className="min-w-0 border-t border-border lg:w-[22rem] lg:shrink-0 lg:border-t-0 lg:border-l">
+              <GpsMotoPanel
+                placa={placaGps}
+                userId={pipeline.user.id}
+                embedded
               />
-            )}
-            {compra && (
-              <>
-                <InfoItem
-                  label="Moto"
-                  value={`${compra.modelo} · ${compra.color}`}
-                />
-                {compra.placa && <InfoItem label="Placa" value={compra.placa} />}
-                <InfoItem
-                  label="Estado compra"
-                  value={COMPRA_ESTADO_LABELS[compra.estado]}
-                />
-                {compra.estado !== "cancelada" && (
-                  <InfoItem
-                    label="Frecuencia de pago"
-                    value={FRECUENCIA_LABELS[compra.frecuencia_pago]}
-                  />
-                )}
-              </>
-            )}
-            {pipeline.visita?.direccion_visita && (
-              <InfoItem
-                label="Dirección"
-                value={pipeline.visita.direccion_visita}
-              />
-            )}
-            {mora.tieneDeuda && compra?.estado === "entregada" && (
-              <>
-                <InfoItem
-                  label="Estado de pagos"
-                  value={moraEstadoLabel(pipeline.atraso)}
-                />
-                <InfoItem
-                  label="Días de atraso"
-                  value={mora.dias > 0 ? String(mora.dias) : "—"}
-                />
-                <InfoItem label="Adeudado" value={formatCop(mora.monto)} />
-              </>
-            )}
-            {resumen && (
-              <>
-                <InfoItem
-                  label="Cuotas pagadas"
-                  value={formatCuotas(resumen.cuotasPagadas)}
-                />
-                <InfoItem
-                  label="Total pagado"
-                  value={formatCop(resumen.totalPagado)}
-                />
-                {resumen.totalAdeudado > 0 && (
-                  <InfoItem
-                    label="Adeudado"
-                    value={formatCop(resumen.totalAdeudado)}
-                  />
-                )}
-              </>
-            )}
-          </div>
+            </div>
+          ) : null}
         </div>
 
-        {placaGps ? (
-          <div className="min-w-0 border-t border-border lg:w-[22rem] lg:shrink-0 lg:border-t-0 lg:border-l">
-            <GpsMotoPanel
-              placa={placaGps}
-              userId={pipeline.user.id}
-              embedded
-            />
+        {titularidadHistorial.length > 0 && (
+          <div className="border-t border-border px-6 py-4">
+            <p className="text-xs text-muted-foreground">
+              Historial de titularidad
+            </p>
+            <ul className="mt-2 flex flex-col gap-1.5">
+              {titularidadHistorial.map((e, i) => (
+                <li key={`${e.at}-${i}`} className="text-sm">
+                  <span className="font-medium">
+                    @{e.from_user} → @{e.to_user}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {" · "}
+                    {new Date(e.at).toLocaleString("es-CO", {
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    })}
+                    {e.motivo ? ` · ${e.motivo}` : ""}
+                    {e.by ? ` · por ${e.by}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
-        ) : null}
+        )}
       </CardContent>
     </Card>
   );

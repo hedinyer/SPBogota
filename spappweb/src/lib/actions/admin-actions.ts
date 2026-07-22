@@ -17,6 +17,10 @@ import {
   hojaVidaFormSchema,
   hojaVidaFormToJson,
 } from "@/lib/contracts/hoja-vida-schema";
+import {
+  appendTitularidadHistorial,
+  assertCanTransferTitularidad,
+} from "@/lib/admin/titularidad";
 import { assertVisitadorAllowedForReferral } from "@/lib/referrals";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage-buckets";
@@ -1826,4 +1830,111 @@ export async function getMotoDocumentoDownloadUrls(compraId: string, userId: num
     placa: compra.placa,
     items,
   };
+}
+
+const transferirTitularidadSchema = z.object({
+  compraId: z.string().uuid(),
+  fromUserId: z.number().int().positive(),
+  toUserId: z.number().int().positive(),
+  motivo: z.string().max(500).optional(),
+});
+
+const TITULARIDAD_USER_ID_TABLES = [
+  "tarifas_pagadas",
+  "pagos",
+  "morosos",
+  "motos_para_recoger",
+  "congelamientos_cuotas",
+  "compra_productos_credito",
+  "solicitudes_taller",
+] as const;
+
+export async function transferirTitularidad(
+  input: z.infer<typeof transferirTitularidadSchema>,
+): Promise<{ ok: true; toUserId: number }> {
+  const session = await requireAdminSession();
+  const supabase = createAdminClient();
+  const parsed = transferirTitularidadSchema.parse(input);
+
+  const { data: compra, error: compraError } = await supabase
+    .from("user_moto_compra")
+    .select("id, user_id, estado, admin_data")
+    .eq("id", parsed.compraId)
+    .maybeSingle();
+
+  if (compraError) throw new Error(compraError.message);
+  if (!compra || Number(compra.user_id) !== parsed.fromUserId) {
+    throw new Error("Compra no encontrada para este cliente.");
+  }
+
+  const [{ data: fromUser }, { data: toUser }, { data: destCompra }] =
+    await Promise.all([
+      supabase
+        .from("users")
+        .select("id, user")
+        .eq("id", parsed.fromUserId)
+        .maybeSingle(),
+      supabase
+        .from("users")
+        .select("id, user")
+        .eq("id", parsed.toUserId)
+        .maybeSingle(),
+      supabase
+        .from("user_moto_compra")
+        .select("id")
+        .eq("user_id", parsed.toUserId)
+        .maybeSingle(),
+    ]);
+
+  assertCanTransferTitularidad({
+    fromUserId: parsed.fromUserId,
+    toUserId: parsed.toUserId,
+    compraEstado: compra.estado as string,
+    destinoTieneCompra: Boolean(destCompra),
+    destinoExiste: Boolean(toUser),
+  });
+
+  if (!fromUser) throw new Error("Cliente origen no encontrado.");
+
+  const adminData = appendTitularidadHistorial(
+    (compra.admin_data as Record<string, unknown>) ?? {},
+    {
+      from_user_id: parsed.fromUserId,
+      to_user_id: parsed.toUserId,
+      from_user: String(fromUser.user),
+      to_user: String(toUser!.user),
+      motivo: parsed.motivo?.trim() || null,
+      at: new Date().toISOString(),
+      by: session.username ?? null,
+    },
+  );
+
+  const { error: updateCompraError } = await supabase
+    .from("user_moto_compra")
+    .update({ user_id: parsed.toUserId, admin_data: adminData })
+    .eq("id", parsed.compraId)
+    .eq("user_id", parsed.fromUserId);
+
+  if (updateCompraError) {
+    if (updateCompraError.message.toLowerCase().includes("unique")) {
+      throw new Error("El destino ya tiene una moto asignada.");
+    }
+    throw new Error(updateCompraError.message);
+  }
+
+  for (const table of TITULARIDAD_USER_ID_TABLES) {
+    const { error } = await supabase
+      .from(table)
+      .update({ user_id: parsed.toUserId })
+      .eq("user_moto_compra_id", parsed.compraId);
+    if (error) throw new Error(`${table}: ${error.message}`);
+  }
+
+  revalidateClient(parsed.fromUserId);
+  revalidateClient(parsed.toUserId);
+  revalidatePath("/clientes");
+  revalidatePath("/vendidas");
+  revalidatePath("/inbox");
+
+  return { ok: true, toUserId: parsed.toUserId };
 }
