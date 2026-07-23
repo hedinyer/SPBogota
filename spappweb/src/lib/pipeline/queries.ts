@@ -53,6 +53,7 @@ import {
 import { formatCop } from "@/lib/utils/format";
 import {
   buildReferralLeaderboard,
+  isHiddenReferral,
   rankLeaderboard,
   referralLabel,
   resolveReferralSource,
@@ -86,20 +87,35 @@ function joinUser(raw: unknown): UserRow | null {
 
 /** Select anidado para enriquecer filas del inbox (nombre, celular, selfie). */
 const INBOX_USER_SELECT =
-  "users(id, user, users_documents(selfie_url), digital_contracts(hoja_vida_data, created_at))";
+  "users(id, user, users_documents(selfie_url, referral_source), digital_contracts(hoja_vida_data, created_at))";
 
 type InboxNestedUser = {
   id: number;
   user: string;
   users_documents:
-    | { selfie_url: string | null }
-    | { selfie_url: string | null }[]
+    | { selfie_url: string | null; referral_source: string | null }
+    | { selfie_url: string | null; referral_source: string | null }[]
     | null;
   digital_contracts:
     | { hoja_vida_data: Record<string, unknown>; created_at: string }
     | { hoja_vida_data: Record<string, unknown>; created_at: string }[]
     | null;
 };
+
+function inboxReferralFromUser(
+  usersRaw: InboxNestedUser | InboxNestedUser[] | null | undefined,
+): string | null {
+  const users = Array.isArray(usersRaw) ? usersRaw[0] : usersRaw;
+  const docsRaw = users?.users_documents;
+  const docs = Array.isArray(docsRaw) ? docsRaw : docsRaw ? [docsRaw] : [];
+  return docs.find((d) => d.referral_source)?.referral_source ?? null;
+}
+
+function inboxUserHidden(
+  usersRaw: InboxNestedUser | InboxNestedUser[] | null | undefined,
+): boolean {
+  return isHiddenReferral(inboxReferralFromUser(usersRaw));
+}
 
 function inboxClientFromUser(
   usersRaw: InboxNestedUser | InboxNestedUser[] | null | undefined,
@@ -180,6 +196,10 @@ export async function getClientPipeline(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (isHiddenReferral(document?.referral_source as string | null | undefined)) {
+    return null;
+  }
 
   const { data: contract } = await supabase
     .from("digital_contracts")
@@ -492,12 +512,13 @@ async function clientUserIdsWithoutVisita(
   supabase: ReturnType<typeof createAdminClient>,
 ): Promise<number[]> {
   const [{ data: docs }, { data: visitas }] = await Promise.all([
-    supabase.from("users_documents").select("user_id"),
+    supabase.from("users_documents").select("user_id, referral_source"),
     supabase.from("visitas").select("user_id"),
   ]);
   const withVisita = new Set((visitas ?? []).map((v) => v.user_id as number));
   const ids = new Set<number>();
   for (const d of docs ?? []) {
+    if (isHiddenReferral(d.referral_source as string | null)) continue;
     const uid = d.user_id as number;
     if (!withVisita.has(uid)) ids.add(uid);
   }
@@ -672,6 +693,7 @@ export async function getInboxListItems(
       for (const row of docsRes.data ?? []) {
         const uid = row.user_id as number;
         if (withVisita.has(uid) || seen.has(uid)) continue;
+        if (isHiddenReferral(row.referral_source as string | null)) continue;
         seen.add(uid);
         const users = joinUser(row.users);
         const cedula = users?.user ?? null;
@@ -721,7 +743,14 @@ export async function getInboxListItems(
         .eq("estado", estado)
         .order("created_at", { ascending: true });
 
-      return (data ?? []).map((row) => {
+      return (data ?? [])
+        .filter(
+          (row) =>
+            !inboxUserHidden(
+              row.users as InboxNestedUser | InboxNestedUser[] | null,
+            ),
+        )
+        .map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -751,7 +780,14 @@ export async function getInboxListItems(
         )
         .order("seleccionado_at", { ascending: true });
 
-      return (data ?? []).map((row) => {
+      return (data ?? [])
+        .filter(
+          (row) =>
+            !inboxUserHidden(
+              row.users as InboxNestedUser | InboxNestedUser[] | null,
+            ),
+        )
+        .map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -780,7 +816,14 @@ export async function getInboxListItems(
         .is("placa", null)
         .order("updated_at", { ascending: true });
 
-      return (data ?? []).map((row) => {
+      return (data ?? [])
+        .filter(
+          (row) =>
+            !inboxUserHidden(
+              row.users as InboxNestedUser | InboxNestedUser[] | null,
+            ),
+        )
+        .map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -809,7 +852,14 @@ export async function getInboxListItems(
         .not("placa", "is", null)
         .order("updated_at", { ascending: true });
 
-      return (data ?? []).map((row) => {
+      return (data ?? [])
+        .filter(
+          (row) =>
+            !inboxUserHidden(
+              row.users as InboxNestedUser | InboxNestedUser[] | null,
+            ),
+        )
+        .map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -839,7 +889,14 @@ export async function getInboxListItems(
         .lt("dias_atraso", DIAS_RECOGER_BANDEJA)
         .order("dias_atraso", { ascending: false });
 
-      return (data ?? []).map((row) => {
+      return (data ?? [])
+        .filter(
+          (row) =>
+            !inboxUserHidden(
+              row.users as InboxNestedUser | InboxNestedUser[] | null,
+            ),
+        )
+        .map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -883,7 +940,14 @@ export async function getInboxListItems(
         .eq("estado", "pendiente")
         .order("fecha_ingreso", { ascending: true });
 
-      return (data ?? []).map((row) => {
+      return (data ?? [])
+        .filter(
+          (row) =>
+            !inboxUserHidden(
+              row.users as InboxNestedUser | InboxNestedUser[] | null,
+            ),
+        )
+        .map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -927,7 +991,14 @@ export async function getInboxListItems(
         .eq("estado", "pendiente")
         .order("created_at", { ascending: true });
 
-      return (data ?? []).map((row) => {
+      return (data ?? [])
+        .filter(
+          (row) =>
+            !inboxUserHidden(
+              row.users as InboxNestedUser | InboxNestedUser[] | null,
+            ),
+        )
+        .map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -1107,9 +1178,10 @@ export async function getReferralLeaderboard(): Promise<
         ? [user.users_documents]
         : [];
     // Sin ref (o null histórico) = punto de venta.
-    const slug = resolveReferralSource(
-      docs.find((d) => d.referral_source)?.referral_source,
-    );
+    const rawReferral =
+      docs.find((d) => d.referral_source)?.referral_source ?? null;
+    if (isHiddenReferral(rawReferral)) continue;
+    const slug = resolveReferralSource(rawReferral);
     counts[slug] = (counts[slug] ?? 0) + 1;
   }
   return buildReferralLeaderboard(counts);
@@ -1130,7 +1202,7 @@ export async function getReferralLinkLeaderboard(): Promise<
   const counts: Record<string, number> = {};
   for (const row of data ?? []) {
     const slug = row.referral_source as string | null;
-    if (!slug) continue;
+    if (!slug || isHiddenReferral(slug)) continue;
     counts[slug] = (counts[slug] ?? 0) + 1;
   }
   return buildReferralLeaderboard(counts);
@@ -1635,7 +1707,7 @@ export async function searchClients(
     diasByUser.set(row.user_id as number, Number(row.dias_atraso) || 0);
   }
 
-  const results: ClientSearchResult[] = (users ?? []).map((raw) => {
+  const results: ClientSearchResult[] = (users ?? []).flatMap((raw) => {
     const user = raw as {
       id: number;
       user: string;
@@ -1684,6 +1756,9 @@ export async function searchClients(
     const docRaw = user.users_documents;
     const docs = Array.isArray(docRaw) ? docRaw : docRaw ? [docRaw] : [];
     const doc = docs[0] ?? null;
+    const rawReferral =
+      docs.find((d) => d.referral_source)?.referral_source ?? null;
+    if (isHiddenReferral(rawReferral)) return [];
 
     const visitaRaw = user.visitas;
     const visita = Array.isArray(visitaRaw) ? visitaRaw[0] : visitaRaw;
@@ -1714,27 +1789,25 @@ export async function searchClients(
       visita?.cliente_nombre?.trim() ||
       user.user;
 
-    return {
-      userId: user.id,
-      username: user.user,
-      displayName,
-      cedula,
-      placa: compra?.placa ?? null,
-      motoLabel: compra ? `${compra.modelo} · ${compra.color}` : null,
-      compraEstado: compra?.estado ?? null,
-      cuotasPagadas: paidCount.get(user.id) ?? 0,
-      diasAtraso: diasByUser.get(user.id) ?? 0,
-      matchLabel: matchLabels.get(user.id) ?? "—",
-      seleccionadoAt: null,
-      selfieUrl: doc?.selfie_url ? String(doc.selfie_url) : null,
-      motoImagenUrl: bike?.imagen_url ? String(bike.imagen_url) : null,
-      referralLabel:
-        referralLabel(
-          resolveReferralSource(
-            docs.find((d) => d.referral_source)?.referral_source,
-          ),
-        ) ?? "Punto de venta",
-    };
+    return [
+      {
+        userId: user.id,
+        username: user.user,
+        displayName,
+        cedula,
+        placa: compra?.placa ?? null,
+        motoLabel: compra ? `${compra.modelo} · ${compra.color}` : null,
+        compraEstado: compra?.estado ?? null,
+        cuotasPagadas: paidCount.get(user.id) ?? 0,
+        diasAtraso: diasByUser.get(user.id) ?? 0,
+        matchLabel: matchLabels.get(user.id) ?? "—",
+        seleccionadoAt: null,
+        selfieUrl: doc?.selfie_url ? String(doc.selfie_url) : null,
+        motoImagenUrl: bike?.imagen_url ? String(bike.imagen_url) : null,
+        referralLabel:
+          referralLabel(resolveReferralSource(rawReferral)) ?? "Punto de venta",
+      },
+    ];
   });
 
   return results.sort((a, b) =>
@@ -1788,7 +1861,7 @@ export async function listClientesMotoCredito(
     );
   }
 
-  const results = compras.map((raw) => {
+  const results = compras.flatMap((raw) => {
     const compra = raw as unknown as {
       id: string;
       modelo: string;
@@ -1856,22 +1929,24 @@ export async function listClientesMotoCredito(
     const usersRaw = compra.users;
     const user = Array.isArray(usersRaw) ? usersRaw[0] : usersRaw;
     if (!user) {
-      return {
-        userId: compra.user_id,
-        username: String(compra.user_id),
-        displayName: String(compra.user_id),
-        cedula: null,
-        placa: compra.placa,
-        motoLabel: `${compra.modelo} · ${compra.color}`,
-        compraEstado: compra.estado,
-        cuotasPagadas: paidCount.get(compra.user_id) ?? 0,
-        diasAtraso: diasByCompra.get(compra.id) ?? 0,
-        matchLabel: "",
-        seleccionadoAt: compra.seleccionado_at,
-        selfieUrl: null,
-        motoImagenUrl: null,
-        referralLabel: "Punto de venta",
-      };
+      return [
+        {
+          userId: compra.user_id,
+          username: String(compra.user_id),
+          displayName: String(compra.user_id),
+          cedula: null,
+          placa: compra.placa,
+          motoLabel: `${compra.modelo} · ${compra.color}`,
+          compraEstado: compra.estado,
+          cuotasPagadas: paidCount.get(compra.user_id) ?? 0,
+          diasAtraso: diasByCompra.get(compra.id) ?? 0,
+          matchLabel: "",
+          seleccionadoAt: compra.seleccionado_at,
+          selfieUrl: null,
+          motoImagenUrl: null,
+          referralLabel: "Punto de venta",
+        },
+      ];
     }
 
     const visitaRaw = user.visitas;
@@ -1879,6 +1954,9 @@ export async function listClientesMotoCredito(
     const docRaw = user.users_documents;
     const docs = Array.isArray(docRaw) ? docRaw : docRaw ? [docRaw] : [];
     const doc = docs[0] ?? null;
+    const rawReferral =
+      docs.find((d) => d.referral_source)?.referral_source ?? null;
+    if (isHiddenReferral(rawReferral)) return [];
     const bikeRaw = compra.bike_table;
     const bike = Array.isArray(bikeRaw) ? bikeRaw[0] : bikeRaw;
 
@@ -1906,27 +1984,25 @@ export async function listClientesMotoCredito(
       visita?.cliente_nombre?.trim() ||
       user.user;
 
-    return {
-      userId: user.id,
-      username: user.user,
-      displayName,
-      cedula,
-      placa: compra.placa,
-      motoLabel: `${compra.modelo} · ${compra.color}`,
-      compraEstado: compra.estado,
-      cuotasPagadas: paidCount.get(user.id) ?? 0,
-      diasAtraso: diasByCompra.get(compra.id) ?? 0,
-      matchLabel: "",
-      seleccionadoAt: compra.seleccionado_at,
-      selfieUrl: doc?.selfie_url ? String(doc.selfie_url) : null,
-      motoImagenUrl: bike?.imagen_url ? String(bike.imagen_url) : null,
-      referralLabel:
-        referralLabel(
-          resolveReferralSource(
-            docs.find((d) => d.referral_source)?.referral_source,
-          ),
-        ) ?? "Punto de venta",
-    };
+    return [
+      {
+        userId: user.id,
+        username: user.user,
+        displayName,
+        cedula,
+        placa: compra.placa,
+        motoLabel: `${compra.modelo} · ${compra.color}`,
+        compraEstado: compra.estado,
+        cuotasPagadas: paidCount.get(user.id) ?? 0,
+        diasAtraso: diasByCompra.get(compra.id) ?? 0,
+        matchLabel: "",
+        seleccionadoAt: compra.seleccionado_at,
+        selfieUrl: doc?.selfie_url ? String(doc.selfie_url) : null,
+        motoImagenUrl: bike?.imagen_url ? String(bike.imagen_url) : null,
+        referralLabel:
+          referralLabel(resolveReferralSource(rawReferral)) ?? "Punto de venta",
+      },
+    ];
   });
 
   return results.sort((a, b) => {

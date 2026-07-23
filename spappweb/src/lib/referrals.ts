@@ -1,12 +1,22 @@
 /** Fuentes de captación con link propio de hoja de vida (comisiones). */
 export const REFERRAL_SOURCES = [
   { slug: "punto-de-venta", label: "Punto de venta" },
-  { slug: "guillen", label: "Guillen" },
   { slug: "yhosmer", label: "Yhosmer" },
   { slug: "fabian", label: "Fabian" },
 ] as const;
 
 export type ReferralSlug = (typeof REFERRAL_SOURCES)[number]["slug"];
+
+/** Slugs históricos ocultos en esta app (solo Gilberto). Mirar valor crudo de DB. */
+export const HIDDEN_REFERRAL_SLUGS = ["guillen"] as const;
+
+export function isHiddenReferral(raw: string | null | undefined): boolean {
+  const slug = raw?.trim().toLowerCase();
+  return (
+    !!slug &&
+    (HIDDEN_REFERRAL_SLUGS as readonly string[]).includes(slug)
+  );
+}
 
 const KNOWN = new Set(REFERRAL_SOURCES.map((s) => s.slug));
 
@@ -36,7 +46,7 @@ export function referralLabel(slug: string | null | undefined): string | null {
 }
 
 /** Referidos cuya visita solo puede ir al visitador con el mismo nombre. */
-export const REFERRAL_LOCKED_VISITADOR_SLUGS = ["guillen", "yhosmer"] as const;
+export const REFERRAL_LOCKED_VISITADOR_SLUGS = ["yhosmer"] as const;
 
 function normalizeVisitadorSlug(nombre: string): string {
   return nombre
@@ -54,7 +64,7 @@ export function visitadorMatchesReferral(
   return normalizeVisitadorSlug(visitadorNombre) === referralSlug;
 }
 
-/** Punto de venta / Fabian → todos; Guillen/Yhosmer → solo el visitador homónimo. */
+/** Punto de venta / Fabian → todos; Yhosmer → solo el visitador homónimo. */
 export function filterVisitadoresForReferral<T extends { nombre: string }>(
   visitadores: T[],
   referralSource: string | null | undefined,
