@@ -72,13 +72,14 @@ export function MotoSelectionPanel({
     );
   }
 
+  const compraId = compra.id;
+
   function savePlacaChasis(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!userId) {
       toast.error("No se puede guardar sin usuario.");
       return;
     }
-    const compraId = compra.id;
     const fd = new FormData(e.currentTarget);
     const placa = String(fd.get("placa") ?? "").trim();
     const chasis = String(fd.get("chasis") ?? "").trim();
