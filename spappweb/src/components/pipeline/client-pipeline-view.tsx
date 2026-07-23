@@ -92,6 +92,7 @@ export function ClientPipelineView({
               compra={pipeline.compra}
               contractId={contractId}
               clienteCelular={clienteCelular}
+              userId={userId}
             />
           )}
           {adminStep === "pago" && (
@@ -166,6 +167,7 @@ export function ClientPipelineView({
                 compra={pipeline.compra}
                 contractId={contractId}
                 clienteCelular={clienteCelular}
+                userId={userId}
               />
               {adminStep !== "pago" && (
                 <>

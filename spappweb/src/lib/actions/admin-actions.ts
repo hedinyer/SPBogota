@@ -311,20 +311,30 @@ const deliverySchema = z.object({
   placa: z.string().min(1),
   chasis: z.string().min(1),
   referencia: z.string().optional(),
-  fechaEntrega: z.string().min(1),
+  fechaEntrega: z.string().min(1).optional(),
 });
 
 export async function updateDelivery(input: z.infer<typeof deliverySchema>) {
   const parsed = deliverySchema.parse(input);
   const supabase = await assertAdmin();
+  const update: {
+    placa: string;
+    chasis: string;
+    referencia?: string | null;
+    fecha_entrega?: string;
+  } = {
+    placa: parsed.placa.trim().toUpperCase(),
+    chasis: parsed.chasis.trim(),
+  };
+  if (parsed.referencia !== undefined) {
+    update.referencia = parsed.referencia.trim() || null;
+  }
+  if (parsed.fechaEntrega) {
+    update.fecha_entrega = parsed.fechaEntrega;
+  }
   const { error } = await supabase
     .from("user_moto_compra")
-    .update({
-      placa: parsed.placa.trim().toUpperCase(),
-      chasis: parsed.chasis.trim(),
-      referencia: parsed.referencia?.trim() || null,
-      fecha_entrega: parsed.fechaEntrega,
-    })
+    .update(update)
     .eq("id", parsed.compraId);
 
   if (error) throw new Error(error.message);

@@ -1,7 +1,9 @@
 "use client";
 
+import { useTransition, type FormEvent } from "react";
 import { Copy, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
+import { updateDelivery } from "@/lib/actions/admin-actions";
 import type {
   ContractStatus,
   DigitalContractRow,
@@ -11,6 +13,8 @@ import { FRECUENCIA_LABELS, COMPRA_ESTADO_LABELS } from "@/lib/pipeline/types";
 import { formatCop } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { getSiteUrl } from "@/lib/utils/site-url";
 
 interface MotoSelectionPanelProps {
@@ -18,6 +22,7 @@ interface MotoSelectionPanelProps {
   compra: UserMotoCompraRow | null;
   contractId?: string | null;
   clienteCelular?: string | null;
+  userId?: number;
 }
 
 function contractSigned(contract: DigitalContractRow | null): boolean {
@@ -29,7 +34,10 @@ export function MotoSelectionPanel({
   compra,
   contractId,
   clienteCelular,
+  userId,
 }: MotoSelectionPanelProps) {
+  const [pending, startTransition] = useTransition();
+
   if (!contractSigned(contract)) {
     return (
       <Card>
@@ -64,44 +72,110 @@ export function MotoSelectionPanel({
     );
   }
 
+  function savePlacaChasis(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!userId) {
+      toast.error("No se puede guardar sin usuario.");
+      return;
+    }
+    const fd = new FormData(e.currentTarget);
+    const placa = String(fd.get("placa") ?? "").trim();
+    const chasis = String(fd.get("chasis") ?? "").trim();
+    if (!placa || !chasis) {
+      toast.error("Placa y chasis son obligatorios.");
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await updateDelivery({
+          compraId: compra.id,
+          userId,
+          placa,
+          chasis,
+        });
+        toast.success("Placa y chasis guardados.");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Error al guardar.");
+      }
+    });
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Moto seleccionada</CardTitle>
       </CardHeader>
       <CardContent>
-        <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-muted-foreground">Modelo</dt>
-            <dd className="font-medium">{compra.modelo}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Color</dt>
-            <dd className="font-medium">{compra.color}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Frecuencia</dt>
-            <dd>{FRECUENCIA_LABELS[compra.frecuencia_pago]}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Estado</dt>
-            <dd>{COMPRA_ESTADO_LABELS[compra.estado]}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Cuota inicial</dt>
-            <dd>{formatCop(compra.cuota_inicial_monto)}</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Cuota adelantada</dt>
-            <dd>{formatCop(compra.monto_cuota_periodo)}</dd>
-          </div>
-          <div className="sm:col-span-2">
-            <dt className="text-muted-foreground">Total primer pago</dt>
-            <dd className="text-lg font-semibold">
-              {formatCop(compra.monto_total_primer_pago)}
-            </dd>
-          </div>
-        </dl>
+        <form className="flex flex-col gap-4" onSubmit={savePlacaChasis}>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-muted-foreground">Modelo</dt>
+              <dd className="font-medium">{compra.modelo}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Color</dt>
+              <dd className="font-medium">{compra.color}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Frecuencia</dt>
+              <dd>{FRECUENCIA_LABELS[compra.frecuencia_pago]}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Estado</dt>
+              <dd>{COMPRA_ESTADO_LABELS[compra.estado]}</dd>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="moto-placa" className="text-muted-foreground">
+                Placa
+              </Label>
+              <Input
+                id="moto-placa"
+                name="placa"
+                defaultValue={compra.placa ?? ""}
+                placeholder="ABC123"
+                className="font-medium uppercase"
+                disabled={!userId || pending}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="moto-chasis" className="text-muted-foreground">
+                Chasis
+              </Label>
+              <Input
+                id="moto-chasis"
+                name="chasis"
+                defaultValue={compra.chasis ?? ""}
+                className="font-medium"
+                disabled={!userId || pending}
+              />
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Cuota inicial</dt>
+              <dd>{formatCop(compra.cuota_inicial_monto)}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Cuota adelantada</dt>
+              <dd>{formatCop(compra.monto_cuota_periodo)}</dd>
+            </div>
+            <div className="sm:col-span-2">
+              <dt className="text-muted-foreground">Total primer pago</dt>
+              <dd className="text-lg font-semibold">
+                {formatCop(compra.monto_total_primer_pago)}
+              </dd>
+            </div>
+          </dl>
+          {userId ? (
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              className="w-fit"
+              disabled={pending}
+            >
+              Guardar placa y chasis
+            </Button>
+          ) : null}
+        </form>
       </CardContent>
     </Card>
   );
