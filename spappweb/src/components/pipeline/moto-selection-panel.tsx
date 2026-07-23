@@ -78,6 +78,7 @@ export function MotoSelectionPanel({
       toast.error("No se puede guardar sin usuario.");
       return;
     }
+    const compraId = compra.id;
     const fd = new FormData(e.currentTarget);
     const placa = String(fd.get("placa") ?? "").trim();
     const chasis = String(fd.get("chasis") ?? "").trim();
@@ -88,7 +89,7 @@ export function MotoSelectionPanel({
     startTransition(async () => {
       try {
         await updateDelivery({
-          compraId: compra.id,
+          compraId,
           userId,
           placa,
           chasis,
