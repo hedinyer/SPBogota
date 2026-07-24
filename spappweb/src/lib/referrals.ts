@@ -1,20 +1,21 @@
 /** Fuentes de captación con link propio de hoja de vida (comisiones). */
 export const REFERRAL_SOURCES = [
   { slug: "punto-de-venta", label: "Punto de venta" },
-  { slug: "guillen", label: "Guillen" },
   { slug: "yhosmer", label: "Yhosmer" },
   { slug: "fabian", label: "Fabian" },
 ] as const;
 
 export type ReferralSlug = (typeof REFERRAL_SOURCES)[number]["slug"];
 
-/** ponytail: este deploy es solo Guillén; otro captador = otro deploy o quitar el scope */
-export const APP_REFERRAL_SCOPE: ReferralSlug = "guillen";
+/** Slugs históricos ocultos en esta app (solo Gilberto). Mirar valor crudo de DB. */
+export const HIDDEN_REFERRAL_SLUGS = ["guillen"] as const;
 
-export function isInReferralScope(
-  referralSource: string | null | undefined,
-): boolean {
-  return referralSource === APP_REFERRAL_SCOPE;
+export function isHiddenReferral(raw: string | null | undefined): boolean {
+  const slug = raw?.trim().toLowerCase();
+  return (
+    !!slug &&
+    (HIDDEN_REFERRAL_SLUGS as readonly string[]).includes(slug)
+  );
 }
 
 const KNOWN = new Set(REFERRAL_SOURCES.map((s) => s.slug));
@@ -29,13 +30,13 @@ export function parseReferralSource(
 }
 
 /**
- * Sin `ref` válido en este deploy = Guillén (APP_REFERRAL_SCOPE).
- * ponytail: si WhatsApp/el draft pierden ?ref=, el registro igual cuenta para Guillén.
+ * Sin `ref` (URL /hojadevida) = punto de venta.
+ * También vale ?ref=punto-de-venta.
  */
 export function resolveReferralSource(
   raw: string | null | undefined,
 ): ReferralSlug {
-  return (parseReferralSource(raw) as ReferralSlug | null) ?? APP_REFERRAL_SCOPE;
+  return (parseReferralSource(raw) as ReferralSlug | null) ?? "punto-de-venta";
 }
 
 export function referralLabel(slug: string | null | undefined): string | null {
@@ -44,8 +45,7 @@ export function referralLabel(slug: string | null | undefined): string | null {
   return found?.label ?? slug;
 }
 
-/** Referidos cuya visita solo puede ir al visitador con el mismo nombre.
- *  ponytail: APP_REFERRAL_SCOPE (guillen) NO usa este lock — puede asignar a todo su equipo. */
+/** Referidos cuya visita solo puede ir al visitador con el mismo nombre. */
 export const REFERRAL_LOCKED_VISITADOR_SLUGS = ["yhosmer"] as const;
 
 function normalizeVisitadorSlug(nombre: string): string {
@@ -64,17 +64,12 @@ export function visitadorMatchesReferral(
   return normalizeVisitadorSlug(visitadorNombre) === referralSlug;
 }
 
-/**
- * Guillen (este deploy): todos los visitadores del equipo (él + ayudantes).
- * Yhosmer (legacy): solo el visitador homónimo.
- * Resto: cualquiera.
- */
+/** Punto de venta / Fabian → todos; Yhosmer → solo el visitador homónimo. */
 export function filterVisitadoresForReferral<T extends { nombre: string }>(
   visitadores: T[],
   referralSource: string | null | undefined,
 ): T[] {
   const slug = resolveReferralSource(referralSource);
-  if (slug === APP_REFERRAL_SCOPE) return visitadores;
   if (
     !(REFERRAL_LOCKED_VISITADOR_SLUGS as readonly string[]).includes(slug)
   ) {
@@ -88,7 +83,6 @@ export function assertVisitadorAllowedForReferral(
   referralSource: string | null | undefined,
 ): void {
   const slug = resolveReferralSource(referralSource);
-  if (slug === APP_REFERRAL_SCOPE) return;
   if (
     !(REFERRAL_LOCKED_VISITADOR_SLUGS as readonly string[]).includes(slug)
   ) {

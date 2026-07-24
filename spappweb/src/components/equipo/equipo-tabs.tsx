@@ -49,14 +49,14 @@ export function EquipoTabs({
 
       <TabsContent value="visitadores" className="flex flex-col gap-4">
         <p className="text-sm text-muted-foreground">
-          Tu equipo de visitas: créalos aquí y asígnalos a clientes de tu link.
+          Personas que realizan visitas domiciliarias.
         </p>
         <VisitadoresManager visitadores={visitadores} />
       </TabsContent>
 
       <TabsContent value="vendedores" className="flex flex-col gap-4">
         <p className="text-sm text-muted-foreground">
-          Tu link de hoja de vida para atribución.
+          Links de hoja de vida para atribución de comisiones.
         </p>
         <EquipoReferralCards />
       </TabsContent>

@@ -20,7 +20,7 @@ export default async function VisitadoresPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Equipo"
-        description="Tu link, tus visitadores y métricas de captación."
+        description="Visitadores, vendedores y ranking de captación."
       />
       <EquipoTabs
         visitadores={visitadores}
