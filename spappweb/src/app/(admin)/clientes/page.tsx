@@ -9,9 +9,10 @@ export default async function ClientesPage({
 }) {
   const { q, nuevo } = await searchParams;
   const query = q?.trim() ?? "";
-  const [results, creditClients] = await Promise.all([
+  const [results, creditClients, guillenClients] = await Promise.all([
     query.length >= 2 ? searchClients(query) : Promise.resolve([]),
     listClientesMotoCredito(),
+    listClientesMotoCredito(200, { onlyGuillen: true }),
   ]);
 
   return (
@@ -24,6 +25,7 @@ export default async function ClientesPage({
         initialQuery={query}
         initialResults={results}
         creditClients={creditClients}
+        guillenClients={guillenClients}
         initialShowCreate={nuevo === "1"}
       />
     </div>

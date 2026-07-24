@@ -19,6 +19,7 @@ const loadPipelineEvents = () => import("@/lib/agent/pipeline-events");
 
 const INBOX_QUEUE_IDS = [
   "creditos",
+  "clientes_guillen",
   "pagos",
   "retiro",
   "entrega",

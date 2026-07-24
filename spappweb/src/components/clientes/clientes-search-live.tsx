@@ -6,6 +6,13 @@ import { searchClientesAction } from "@/lib/actions/clientes-search-actions";
 import type { ClientSearchResult } from "@/lib/pipeline/types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { ClientesSearchResults } from "@/components/clientes/clientes-search-results";
 import { CrearClienteForm } from "@/components/clientes/crear-cliente-form";
 
@@ -13,11 +20,13 @@ export function ClientesSearchLive({
   initialQuery,
   initialResults,
   creditClients,
+  guillenClients = [],
   initialShowCreate = false,
 }: {
   initialQuery: string;
   initialResults: ClientSearchResult[];
   creditClients: ClientSearchResult[];
+  guillenClients?: ClientSearchResult[];
   initialShowCreate?: boolean;
 }) {
   const [query, setQuery] = useState(initialQuery);
@@ -125,11 +134,38 @@ export function ClientesSearchLive({
       )}
 
       {trimmed.length < 2 && (
-        <ClientesSearchResults
-          results={creditClients}
-          query=""
-          listTitle={`${creditClients.length} cliente${creditClients.length === 1 ? "" : "s"} con moto a crédito · mayor atraso primero`}
-        />
+        <>
+          <ClientesSearchResults
+            results={creditClients}
+            query=""
+            listTitle={`${creditClients.length} cliente${creditClients.length === 1 ? "" : "s"} con moto a crédito · mayor atraso primero`}
+          />
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg">Clientes (Guillen)</CardTitle>
+              <CardDescription>
+                Llegaron por el link de Guillén
+                {guillenClients.length > 0
+                  ? ` · ${guillenClients.length} con moto a crédito`
+                  : ""}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {guillenClients.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Aún no hay clientes de Guillén con moto a crédito. Todos los
+                  del link están en Hoy → Clientes (Guillen).
+                </p>
+              ) : (
+                <ClientesSearchResults
+                  results={guillenClients}
+                  query=""
+                  listTitle={`${guillenClients.length} con moto a crédito · mayor atraso primero`}
+                />
+              )}
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {trimmed.length >= 2 && activeQuery.trim().length < 2 && pending && (

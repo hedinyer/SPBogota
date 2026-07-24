@@ -102,21 +102,6 @@ type InboxNestedUser = {
     | null;
 };
 
-function inboxReferralFromUser(
-  usersRaw: InboxNestedUser | InboxNestedUser[] | null | undefined,
-): string | null {
-  const users = Array.isArray(usersRaw) ? usersRaw[0] : usersRaw;
-  const docsRaw = users?.users_documents;
-  const docs = Array.isArray(docsRaw) ? docsRaw : docsRaw ? [docsRaw] : [];
-  return docs.find((d) => d.referral_source)?.referral_source ?? null;
-}
-
-function inboxUserHidden(
-  usersRaw: InboxNestedUser | InboxNestedUser[] | null | undefined,
-): boolean {
-  return isHiddenReferral(inboxReferralFromUser(usersRaw));
-}
-
 function inboxClientFromUser(
   usersRaw: InboxNestedUser | InboxNestedUser[] | null | undefined,
   fallbackUserId: number,
@@ -196,10 +181,6 @@ export async function getClientPipeline(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-
-  if (isHiddenReferral(document?.referral_source as string | null | undefined)) {
-    return null;
-  }
 
   const { data: contract } = await supabase
     .from("digital_contracts")
@@ -553,6 +534,7 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
 
   const [
     creditosIds,
+    clientesGuillen,
     visitasSinAsignar,
     visitasProgramadas,
     pagos,
@@ -563,6 +545,10 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
     solicitudesTaller,
   ] = await Promise.all([
     clientUserIdsWithoutVisita(supabase),
+    supabase
+      .from("users_documents")
+      .select("user_id")
+      .eq("referral_source", "guillen"),
     supabase
       .from("visitas")
       .select("id", { count: "exact", head: true })
@@ -604,12 +590,23 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
       .eq("estado", "pendiente"),
   ]);
 
+  if (clientesGuillen.error) throw new Error(clientesGuillen.error.message);
+  const clientesGuillenCount = new Set(
+    (clientesGuillen.data ?? []).map((d) => d.user_id as number),
+  ).size;
+
   return [
     {
       id: "creditos",
       label: "Revisar solicitudes",
       description: "Clientes que aún no tienen visita",
       count: creditosIds.length,
+    },
+    {
+      id: "clientes_guillen",
+      label: "Clientes (Guillen)",
+      description: "Llegaron por el link de Guillén",
+      count: clientesGuillenCount,
     },
     {
       id: "pagos",
@@ -729,6 +726,61 @@ export async function getInboxListItems(
       }
       return items;
     }
+    case "clientes_guillen": {
+      const { data, error } = await supabase
+        .from("users_documents")
+        .select(
+          "user_id, estado_solicitud, created_at, selfie_url, referral_source, users(id, user), digital_contracts(hoja_vida_data)",
+        )
+        .eq("referral_source", "guillen")
+        .order("created_at", { ascending: false });
+
+      if (error) throw new Error(error.message);
+
+      const seen = new Set<number>();
+      const items: InboxListItem[] = [];
+      for (const row of data ?? []) {
+        const uid = row.user_id as number;
+        if (seen.has(uid)) continue;
+        seen.add(uid);
+        const users = joinUser(row.users);
+        const cedula = users?.user ?? null;
+        const contractsRaw = row.digital_contracts as
+          | { hoja_vida_data: Record<string, unknown> }
+          | { hoja_vida_data: Record<string, unknown> }[]
+          | null;
+        const contract = Array.isArray(contractsRaw)
+          ? contractsRaw[0]
+          : contractsRaw;
+        const nombreHoja = String(
+          contract?.hoja_vida_data?.nombre_completo ?? "",
+        ).trim();
+        const celularHoja = String(
+          contract?.hoja_vida_data?.celular ?? "",
+        ).trim();
+        const estado = row.estado_solicitud as string;
+        const estadoLabel =
+          estado === "aceptada"
+            ? "Crédito aprobado"
+            : estado === "rechazada"
+              ? "Crédito rechazado"
+              : "Solicitud pendiente";
+        items.push({
+          userId: uid,
+          username: cedula ?? `#${uid}`,
+          displayName: nombreHoja || cedula || `Cliente ${uid}`,
+          cedula,
+          celular: celularHoja || null,
+          selfieUrl: (row.selfie_url as string | null) ?? null,
+          createdAt: row.created_at as string,
+          estadoSolicitud: estado,
+          referralSource: "guillen",
+          subtitle: `${estadoLabel} · Guillen`,
+          queueId,
+        });
+      }
+      return items;
+    }
     case "visitas_sin_asignar":
     case "visitas_programadas": {
       const estado =
@@ -743,14 +795,7 @@ export async function getInboxListItems(
         .eq("estado", estado)
         .order("created_at", { ascending: true });
 
-      return (data ?? [])
-        .filter(
-          (row) =>
-            !inboxUserHidden(
-              row.users as InboxNestedUser | InboxNestedUser[] | null,
-            ),
-        )
-        .map((row) => {
+      return (data ?? []).map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -780,14 +825,7 @@ export async function getInboxListItems(
         )
         .order("seleccionado_at", { ascending: true });
 
-      return (data ?? [])
-        .filter(
-          (row) =>
-            !inboxUserHidden(
-              row.users as InboxNestedUser | InboxNestedUser[] | null,
-            ),
-        )
-        .map((row) => {
+      return (data ?? []).map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -816,14 +854,7 @@ export async function getInboxListItems(
         .is("placa", null)
         .order("updated_at", { ascending: true });
 
-      return (data ?? [])
-        .filter(
-          (row) =>
-            !inboxUserHidden(
-              row.users as InboxNestedUser | InboxNestedUser[] | null,
-            ),
-        )
-        .map((row) => {
+      return (data ?? []).map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -852,14 +883,7 @@ export async function getInboxListItems(
         .not("placa", "is", null)
         .order("updated_at", { ascending: true });
 
-      return (data ?? [])
-        .filter(
-          (row) =>
-            !inboxUserHidden(
-              row.users as InboxNestedUser | InboxNestedUser[] | null,
-            ),
-        )
-        .map((row) => {
+      return (data ?? []).map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -889,14 +913,7 @@ export async function getInboxListItems(
         .lt("dias_atraso", DIAS_RECOGER_BANDEJA)
         .order("dias_atraso", { ascending: false });
 
-      return (data ?? [])
-        .filter(
-          (row) =>
-            !inboxUserHidden(
-              row.users as InboxNestedUser | InboxNestedUser[] | null,
-            ),
-        )
-        .map((row) => {
+      return (data ?? []).map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -940,14 +957,7 @@ export async function getInboxListItems(
         .eq("estado", "pendiente")
         .order("fecha_ingreso", { ascending: true });
 
-      return (data ?? [])
-        .filter(
-          (row) =>
-            !inboxUserHidden(
-              row.users as InboxNestedUser | InboxNestedUser[] | null,
-            ),
-        )
-        .map((row) => {
+      return (data ?? []).map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -991,14 +1001,7 @@ export async function getInboxListItems(
         .eq("estado", "pendiente")
         .order("created_at", { ascending: true });
 
-      return (data ?? [])
-        .filter(
-          (row) =>
-            !inboxUserHidden(
-              row.users as InboxNestedUser | InboxNestedUser[] | null,
-            ),
-        )
-        .map((row) => {
+      return (data ?? []).map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -1758,7 +1761,6 @@ export async function searchClients(
     const doc = docs[0] ?? null;
     const rawReferral =
       docs.find((d) => d.referral_source)?.referral_source ?? null;
-    if (isHiddenReferral(rawReferral)) return [];
 
     const visitaRaw = user.visitas;
     const visita = Array.isArray(visitaRaw) ? visitaRaw[0] : visitaRaw;
@@ -1817,8 +1819,10 @@ export async function searchClients(
 
 export async function listClientesMotoCredito(
   limit = 200,
+  options?: { onlyGuillen?: boolean },
 ): Promise<ClientSearchResult[]> {
   const supabase = createAdminClient();
+  const onlyGuillen = options?.onlyGuillen === true;
 
   const { data: compras, error } = await supabase
     .from("user_moto_compra")
@@ -1956,7 +1960,8 @@ export async function listClientesMotoCredito(
     const doc = docs[0] ?? null;
     const rawReferral =
       docs.find((d) => d.referral_source)?.referral_source ?? null;
-    if (isHiddenReferral(rawReferral)) return [];
+    const isGuillen = isHiddenReferral(rawReferral);
+    if (onlyGuillen ? !isGuillen : isGuillen) return [];
     const bikeRaw = compra.bike_table;
     const bike = Array.isArray(bikeRaw) ? bikeRaw[0] : bikeRaw;
 

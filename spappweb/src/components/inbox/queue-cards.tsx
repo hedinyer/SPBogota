@@ -61,6 +61,7 @@ function QueueCard({ queue }: { queue: InboxQueue }) {
 export function queueTitle(id: InboxQueueId): string {
   const map: Record<InboxQueueId, string> = {
     creditos: "Clientes sin visita",
+    clientes_guillen: "Clientes (Guillen)",
     visitas_sin_asignar: "Visitas sin asignar",
     visitas_programadas: "Visitas programadas",
     pagos: "Pagos por confirmar",

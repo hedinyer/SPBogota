@@ -60,6 +60,8 @@ export function InboxQueueList({ items, queueId }: InboxQueueListProps) {
   const [toDelete, setToDelete] = useState<InboxListItem | null>(null);
   const canDelete = queueId === "creditos";
   const isCreditos = queueId === "creditos";
+  const isClientesGuillen = queueId === "clientes_guillen";
+  const hasSearch = isCreditos || isClientesGuillen;
 
   const visibleList = useMemo(
     () =>
@@ -69,8 +71,10 @@ export function InboxQueueList({ items, queueId }: InboxQueueListProps) {
               item.estadoSolicitud === creditoFiltro &&
               matchesCreditosSearch(item, search),
           )
-        : list,
-    [isCreditos, list, search, creditoFiltro],
+        : isClientesGuillen
+          ? list.filter((item) => matchesCreditosSearch(item, search))
+          : list,
+    [isCreditos, isClientesGuillen, list, search, creditoFiltro],
   );
 
   useEffect(() => {
@@ -99,27 +103,29 @@ export function InboxQueueList({ items, queueId }: InboxQueueListProps) {
   }
 
   return (
-    <div className={isCreditos ? "flex flex-col gap-4" : undefined}>
-      {isCreditos ? (
+    <div className={hasSearch ? "flex flex-col gap-4" : undefined}>
+      {hasSearch ? (
         <div className="flex flex-col gap-3">
-          <Tabs
-            value={creditoFiltro}
-            onValueChange={(value) =>
-              setCreditoFiltro(value as CreditoFiltro)
-            }
-          >
-            <TabsList className="w-full max-w-lg">
-              <TabsTrigger value="pendiente" className="flex-1">
-                Pendiente
-              </TabsTrigger>
-              <TabsTrigger value="aceptada" className="flex-1">
-                Aprobado
-              </TabsTrigger>
-              <TabsTrigger value="rechazada" className="flex-1">
-                Rechazado
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {isCreditos ? (
+            <Tabs
+              value={creditoFiltro}
+              onValueChange={(value) =>
+                setCreditoFiltro(value as CreditoFiltro)
+              }
+            >
+              <TabsList className="w-full max-w-lg">
+                <TabsTrigger value="pendiente" className="flex-1">
+                  Pendiente
+                </TabsTrigger>
+                <TabsTrigger value="aceptada" className="flex-1">
+                  Aprobado
+                </TabsTrigger>
+                <TabsTrigger value="rechazada" className="flex-1">
+                  Rechazado
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          ) : null}
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -134,7 +140,7 @@ export function InboxQueueList({ items, queueId }: InboxQueueListProps) {
 
       {visibleList.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          {isCreditos && search.trim()
+          {hasSearch && search.trim()
             ? `No hay clientes que coincidan con "${search.trim()}".`
             : isCreditos
               ? creditoFiltro === "pendiente"
@@ -142,7 +148,9 @@ export function InboxQueueList({ items, queueId }: InboxQueueListProps) {
                 : creditoFiltro === "aceptada"
                   ? "No hay clientes con crédito aprobado sin visita."
                   : "No hay clientes con crédito rechazado sin visita."
-              : "No hay items en esta cola."}
+              : isClientesGuillen
+                ? "No hay clientes del link de Guillén."
+                : "No hay items en esta cola."}
         </p>
       ) : (
       <ul className="divide-y divide-border rounded-lg border border-border">

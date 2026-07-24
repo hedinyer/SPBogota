@@ -9,8 +9,10 @@ export const REFERRAL_SOURCES = [
 export type ReferralSlug = (typeof REFERRAL_SOURCES)[number]["slug"];
 
 /**
- * En esta app (Bogotá / Gilberto) no se muestran ni se gestionan.
- * Sí se aceptan en ?ref= para guardar referral_source (app de Guillén).
+ * Captadores que no se mezclan en colas/listas generales.
+ * Sus clientes van en la card "Clientes (Guillen)" (y siguen operables
+ * desde la ficha / colas de trabajo). El link público ?ref= sigue guardando
+ * referral_source.
  */
 export const HIDDEN_REFERRAL_SLUGS = ["guillen"] as const;
 

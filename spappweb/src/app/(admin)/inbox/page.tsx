@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 
 const VALID_QUEUES: InboxQueueId[] = [
   "creditos",
+  "clientes_guillen",
   "visitas_sin_asignar",
   "visitas_programadas",
   "pagos",
