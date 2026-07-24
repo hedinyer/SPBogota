@@ -11,7 +11,7 @@ import {
   visitadorMatchesReferral,
 } from "./referrals";
 
-assert.equal(parseReferralSource("guillen"), null);
+assert.equal(parseReferralSource("guillen"), "guillen");
 assert.equal(isHiddenReferral("guillen"), true);
 assert.equal(isHiddenReferral("Guillen"), true);
 assert.equal(isHiddenReferral("yhosmer"), false);
@@ -21,20 +21,26 @@ assert.equal(parseReferralSource("fabian"), "fabian");
 assert.equal(parseReferralSource("punto-de-venta"), "punto-de-venta");
 assert.equal(parseReferralSource("hacker"), null);
 assert.equal(referralLabel("fabian"), "Fabian");
+assert.equal(referralLabel("guillen"), "Guillen");
 assert.equal(resolveReferralSource(null), "punto-de-venta");
 assert.equal(resolveReferralSource(""), "punto-de-venta");
-assert.equal(resolveReferralSource("guillen"), "punto-de-venta");
+assert.equal(resolveReferralSource("guillen"), "guillen");
 
 const board = buildReferralLeaderboard({
   yhosmer: 5,
   fabian: 5,
   "punto-de-venta": 2,
+  guillen: 99,
 });
 assert.equal(board[0].rank, 1);
 assert.equal(board[1].rank, 1);
 assert.equal(board[2].rank, 3);
 assert.equal(board[2].slug, "punto-de-venta");
 assert.equal(board.length, 3);
+assert.equal(
+  board.find((r) => r.slug === "guillen"),
+  undefined,
+);
 
 const visitadores = [
   { id: 1, nombre: "Guillen" },
@@ -42,7 +48,7 @@ const visitadores = [
   { id: 3, nombre: "Fabian" },
   { id: 4, nombre: "Otro" },
 ];
-// Guillen ya no es fuente conocida → se trata como punto de venta (todos).
+// Guillen se guarda en DB pero aquí no tiene lock de visitador.
 assert.deepEqual(
   filterVisitadoresForReferral(visitadores, "guillen").map((v) => v.id),
   [1, 2, 3, 4],

@@ -2,7 +2,7 @@
 
 import { Copy, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
-import { REFERRAL_SOURCES } from "@/lib/referrals";
+import { isHiddenReferral, REFERRAL_SOURCES } from "@/lib/referrals";
 import { hojaVidaUrl } from "@/lib/utils/site-url";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,9 +14,12 @@ import {
 } from "@/components/ui/card";
 
 export function EquipoReferralCards() {
+  // ponytail: Guillén tiene sp-bogota-guillen; aquí no se muestra su link.
+  const sources = REFERRAL_SOURCES.filter((s) => !isHiddenReferral(s.slug));
+
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {REFERRAL_SOURCES.map((source) => {
+      {sources.map((source) => {
         // Punto de venta: /hojadevida sin ref (también vale ?ref=punto-de-venta).
         const link =
           source.slug === "punto-de-venta"

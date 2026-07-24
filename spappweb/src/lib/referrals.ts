@@ -1,13 +1,17 @@
 /** Fuentes de captación con link propio de hoja de vida (comisiones). */
 export const REFERRAL_SOURCES = [
   { slug: "punto-de-venta", label: "Punto de venta" },
+  { slug: "guillen", label: "Guillen" },
   { slug: "yhosmer", label: "Yhosmer" },
   { slug: "fabian", label: "Fabian" },
 ] as const;
 
 export type ReferralSlug = (typeof REFERRAL_SOURCES)[number]["slug"];
 
-/** Slugs históricos ocultos en esta app (solo Gilberto). Mirar valor crudo de DB. */
+/**
+ * En esta app (Bogotá / Gilberto) no se muestran ni se gestionan.
+ * Sí se aceptan en ?ref= para guardar referral_source (app de Guillén).
+ */
 export const HIDDEN_REFERRAL_SLUGS = ["guillen"] as const;
 
 export function isHiddenReferral(raw: string | null | undefined): boolean {
@@ -32,6 +36,7 @@ export function parseReferralSource(
 /**
  * Sin `ref` (URL /hojadevida) = punto de venta.
  * También vale ?ref=punto-de-venta.
+ * ?ref=guillen se guarda como guillen (oculto en este admin).
  */
 export function resolveReferralSource(
   raw: string | null | undefined,
@@ -64,7 +69,7 @@ export function visitadorMatchesReferral(
   return normalizeVisitadorSlug(visitadorNombre) === referralSlug;
 }
 
-/** Punto de venta / Fabian → todos; Yhosmer → solo el visitador homónimo. */
+/** Punto de venta / Fabian / Guillen → todos; Yhosmer → solo el visitador homónimo. */
 export function filterVisitadoresForReferral<T extends { nombre: string }>(
   visitadores: T[],
   referralSource: string | null | undefined,
@@ -128,7 +133,7 @@ export function buildReferralLeaderboard(
   counts: Record<string, number>,
 ): ReferralLeaderboardRow[] {
   return rankLeaderboard(
-    REFERRAL_SOURCES.map((s) => ({
+    REFERRAL_SOURCES.filter((s) => !isHiddenReferral(s.slug)).map((s) => ({
       slug: s.slug,
       label: s.label,
       count: counts[s.slug] ?? 0,
