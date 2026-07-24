@@ -52,14 +52,27 @@ import {
 } from "@/lib/pipeline/mora-utils";
 import { formatCop } from "@/lib/utils/format";
 import {
+  APP_REFERRAL_SCOPE,
   buildReferralLeaderboard,
-  isHiddenReferral,
+  isInReferralScope,
   rankLeaderboard,
   referralLabel,
   resolveReferralSource,
   type LeaderboardRow,
   type ReferralLeaderboardRow,
 } from "@/lib/referrals";
+
+/** user_ids con referral_source = APP_REFERRAL_SCOPE (este deploy). */
+async function scopedUserIds(
+  supabase: ReturnType<typeof createAdminClient>,
+): Promise<number[]> {
+  const { data, error } = await supabase
+    .from("users_documents")
+    .select("user_id")
+    .eq("referral_source", APP_REFERRAL_SCOPE);
+  if (error) throw new Error(error.message);
+  return [...new Set((data ?? []).map((d) => d.user_id as number))];
+}
 
 function normalizeVisita(raw: unknown): VisitaRow | null {
   if (!raw) return null;
@@ -87,35 +100,20 @@ function joinUser(raw: unknown): UserRow | null {
 
 /** Select anidado para enriquecer filas del inbox (nombre, celular, selfie). */
 const INBOX_USER_SELECT =
-  "users(id, user, users_documents(selfie_url, referral_source), digital_contracts(hoja_vida_data, created_at))";
+  "users(id, user, users_documents(selfie_url), digital_contracts(hoja_vida_data, created_at))";
 
 type InboxNestedUser = {
   id: number;
   user: string;
   users_documents:
-    | { selfie_url: string | null; referral_source: string | null }
-    | { selfie_url: string | null; referral_source: string | null }[]
+    | { selfie_url: string | null }
+    | { selfie_url: string | null }[]
     | null;
   digital_contracts:
     | { hoja_vida_data: Record<string, unknown>; created_at: string }
     | { hoja_vida_data: Record<string, unknown>; created_at: string }[]
     | null;
 };
-
-function inboxReferralFromUser(
-  usersRaw: InboxNestedUser | InboxNestedUser[] | null | undefined,
-): string | null {
-  const users = Array.isArray(usersRaw) ? usersRaw[0] : usersRaw;
-  const docsRaw = users?.users_documents;
-  const docs = Array.isArray(docsRaw) ? docsRaw : docsRaw ? [docsRaw] : [];
-  return docs.find((d) => d.referral_source)?.referral_source ?? null;
-}
-
-function inboxUserHidden(
-  usersRaw: InboxNestedUser | InboxNestedUser[] | null | undefined,
-): boolean {
-  return isHiddenReferral(inboxReferralFromUser(usersRaw));
-}
 
 function inboxClientFromUser(
   usersRaw: InboxNestedUser | InboxNestedUser[] | null | undefined,
@@ -197,7 +195,8 @@ export async function getClientPipeline(
     .limit(1)
     .maybeSingle();
 
-  if (isHiddenReferral(document?.referral_source as string | null | undefined)) {
+  // ponytail: bloquea URL directa a clientes fuera del scope de este deploy
+  if (!isInReferralScope(document?.referral_source as string | null)) {
     return null;
   }
 
@@ -512,13 +511,15 @@ async function clientUserIdsWithoutVisita(
   supabase: ReturnType<typeof createAdminClient>,
 ): Promise<number[]> {
   const [{ data: docs }, { data: visitas }] = await Promise.all([
-    supabase.from("users_documents").select("user_id, referral_source"),
+    supabase
+      .from("users_documents")
+      .select("user_id")
+      .eq("referral_source", APP_REFERRAL_SCOPE),
     supabase.from("visitas").select("user_id"),
   ]);
   const withVisita = new Set((visitas ?? []).map((v) => v.user_id as number));
   const ids = new Set<number>();
   for (const d of docs ?? []) {
-    if (isHiddenReferral(d.referral_source as string | null)) continue;
     const uid = d.user_id as number;
     if (!withVisita.has(uid)) ids.add(uid);
   }
@@ -551,6 +552,65 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
   const supabase = createAdminClient();
   await ensureMoraSynced(supabase);
 
+  const scopedIds = await scopedUserIds(supabase);
+  const emptyQueues = (): InboxQueue[] => [
+    {
+      id: "creditos",
+      label: "Revisar solicitudes",
+      description: "Clientes que aún no tienen visita",
+      count: 0,
+    },
+    {
+      id: "pagos",
+      label: "Confirmar pagos",
+      description: "Pagos iniciales por verificar",
+      count: 0,
+    },
+    {
+      id: "retiro",
+      label: "Preparar retiro",
+      description: "Motos pagadas sin datos de placa",
+      count: 0,
+    },
+    {
+      id: "entrega",
+      label: "Registrar entrega",
+      description: "Motos listas para marcar como entregadas",
+      count: 0,
+    },
+    {
+      id: "visitas_sin_asignar",
+      label: "Asignar visitas",
+      description: "Visitas domiciliarias sin visitador",
+      count: 0,
+    },
+    {
+      id: "visitas_programadas",
+      label: "Completar visitas",
+      description: "Visitas ya programadas con visitador",
+      count: 0,
+    },
+    {
+      id: "morosos",
+      label: "Clientes en mora",
+      description: "Exactamente 3 días de atraso en tarifas",
+      count: 0,
+    },
+    {
+      id: "recoger",
+      label: "Motos para recoger",
+      description: "Mora de 4+ días — recuperación",
+      count: 0,
+    },
+    {
+      id: "solicitudes_taller",
+      label: "Solicitudes taller",
+      description: "Repuestos, reparaciones y cambio de aceite",
+      count: 0,
+    },
+  ];
+  if (scopedIds.length === 0) return emptyQueues();
+
   const [
     creditosIds,
     visitasSinAsignar,
@@ -566,42 +626,50 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
     supabase
       .from("visitas")
       .select("id", { count: "exact", head: true })
-      .eq("estado", "pendiente_asignacion"),
+      .eq("estado", "pendiente_asignacion")
+      .in("user_id", scopedIds),
     supabase
       .from("visitas")
       .select("id", { count: "exact", head: true })
-      .eq("estado", "asignada"),
+      .eq("estado", "asignada")
+      .in("user_id", scopedIds),
     supabase
       .from("user_moto_compra")
       .select("id", { count: "exact", head: true })
       .eq("estado", "pendiente_pago")
       .or(
         "pago_inicial_confirmado.eq.false,pago_cuota_confirmado.eq.false",
-      ),
+      )
+      .in("user_id", scopedIds),
     supabase
       .from("user_moto_compra")
       .select("id", { count: "exact", head: true })
       .eq("estado", "lista_retiro")
-      .is("placa", null),
+      .is("placa", null)
+      .in("user_id", scopedIds),
     supabase
       .from("user_moto_compra")
       .select("id", { count: "exact", head: true })
       .eq("estado", "lista_retiro")
-      .not("placa", "is", null),
+      .not("placa", "is", null)
+      .in("user_id", scopedIds),
     supabase
       .from("morosos")
       .select("id", { count: "exact", head: true })
       .eq("estado", "activo")
       .gte("dias_atraso", DIAS_MORA_BANDEJA)
-      .lt("dias_atraso", DIAS_RECOGER_BANDEJA),
+      .lt("dias_atraso", DIAS_RECOGER_BANDEJA)
+      .in("user_id", scopedIds),
     supabase
       .from("motos_para_recoger")
       .select("id", { count: "exact", head: true })
-      .eq("estado", "pendiente"),
+      .eq("estado", "pendiente")
+      .in("user_id", scopedIds),
     supabase
       .from("solicitudes_taller")
       .select("id", { count: "exact", head: true })
-      .eq("estado", "pendiente"),
+      .eq("estado", "pendiente")
+      .in("user_id", scopedIds),
   ]);
 
   return [
@@ -670,6 +738,9 @@ export async function getInboxListItems(
     await ensureMoraSynced(supabase);
   }
 
+  const scopedIds = await scopedUserIds(supabase);
+  if (scopedIds.length === 0) return [];
+
   switch (queueId) {
     case "creditos": {
       const [docsRes, visitasRes] = await Promise.all([
@@ -678,6 +749,7 @@ export async function getInboxListItems(
           .select(
             "user_id, estado_solicitud, created_at, selfie_url, referral_source, users(id, user), digital_contracts(hoja_vida_data)",
           )
+          .eq("referral_source", APP_REFERRAL_SCOPE)
           .order("created_at", { ascending: false }),
         supabase.from("visitas").select("user_id"),
       ]);
@@ -693,7 +765,6 @@ export async function getInboxListItems(
       for (const row of docsRes.data ?? []) {
         const uid = row.user_id as number;
         if (withVisita.has(uid) || seen.has(uid)) continue;
-        if (isHiddenReferral(row.referral_source as string | null)) continue;
         seen.add(uid);
         const users = joinUser(row.users);
         const cedula = users?.user ?? null;
@@ -741,16 +812,10 @@ export async function getInboxListItems(
           `user_id, cliente_nombre, cliente_celular, created_at, ${INBOX_USER_SELECT}`,
         )
         .eq("estado", estado)
+        .in("user_id", scopedIds)
         .order("created_at", { ascending: true });
 
-      return (data ?? [])
-        .filter(
-          (row) =>
-            !inboxUserHidden(
-              row.users as InboxNestedUser | InboxNestedUser[] | null,
-            ),
-        )
-        .map((row) => {
+      return (data ?? []).map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -778,16 +843,10 @@ export async function getInboxListItems(
         .or(
           "pago_inicial_confirmado.eq.false,pago_cuota_confirmado.eq.false",
         )
+        .in("user_id", scopedIds)
         .order("seleccionado_at", { ascending: true });
 
-      return (data ?? [])
-        .filter(
-          (row) =>
-            !inboxUserHidden(
-              row.users as InboxNestedUser | InboxNestedUser[] | null,
-            ),
-        )
-        .map((row) => {
+      return (data ?? []).map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -814,16 +873,10 @@ export async function getInboxListItems(
         )
         .eq("estado", "lista_retiro")
         .is("placa", null)
+        .in("user_id", scopedIds)
         .order("updated_at", { ascending: true });
 
-      return (data ?? [])
-        .filter(
-          (row) =>
-            !inboxUserHidden(
-              row.users as InboxNestedUser | InboxNestedUser[] | null,
-            ),
-        )
-        .map((row) => {
+      return (data ?? []).map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -850,16 +903,10 @@ export async function getInboxListItems(
         )
         .eq("estado", "lista_retiro")
         .not("placa", "is", null)
+        .in("user_id", scopedIds)
         .order("updated_at", { ascending: true });
 
-      return (data ?? [])
-        .filter(
-          (row) =>
-            !inboxUserHidden(
-              row.users as InboxNestedUser | InboxNestedUser[] | null,
-            ),
-        )
-        .map((row) => {
+      return (data ?? []).map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -887,16 +934,10 @@ export async function getInboxListItems(
         .eq("estado", "activo")
         .gte("dias_atraso", DIAS_MORA_BANDEJA)
         .lt("dias_atraso", DIAS_RECOGER_BANDEJA)
+        .in("user_id", scopedIds)
         .order("dias_atraso", { ascending: false });
 
-      return (data ?? [])
-        .filter(
-          (row) =>
-            !inboxUserHidden(
-              row.users as InboxNestedUser | InboxNestedUser[] | null,
-            ),
-        )
-        .map((row) => {
+      return (data ?? []).map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -938,16 +979,10 @@ export async function getInboxListItems(
           `user_id, dias_atraso, monto_adeudado, ${INBOX_USER_SELECT}, user_moto_compra(modelo, color, placa, bike_table(imagen_url))`,
         )
         .eq("estado", "pendiente")
+        .in("user_id", scopedIds)
         .order("fecha_ingreso", { ascending: true });
 
-      return (data ?? [])
-        .filter(
-          (row) =>
-            !inboxUserHidden(
-              row.users as InboxNestedUser | InboxNestedUser[] | null,
-            ),
-        )
-        .map((row) => {
+      return (data ?? []).map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -989,16 +1024,10 @@ export async function getInboxListItems(
           `id, user_id, tipo, estado, total_estimado, created_at, ${INBOX_USER_SELECT}, user_moto_compra(modelo, placa, bike_table(imagen_url))`,
         )
         .eq("estado", "pendiente")
+        .in("user_id", scopedIds)
         .order("created_at", { ascending: true });
 
-      return (data ?? [])
-        .filter(
-          (row) =>
-            !inboxUserHidden(
-              row.users as InboxNestedUser | InboxNestedUser[] | null,
-            ),
-        )
-        .map((row) => {
+      return (data ?? []).map((row) => {
         const client = inboxClientFromUser(
           row.users as InboxNestedUser | InboxNestedUser[] | null,
           row.user_id as number,
@@ -1177,14 +1206,15 @@ export async function getReferralLeaderboard(): Promise<
       : user?.users_documents
         ? [user.users_documents]
         : [];
-    // Sin ref (o null histórico) = punto de venta.
-    const rawReferral =
-      docs.find((d) => d.referral_source)?.referral_source ?? null;
-    if (isHiddenReferral(rawReferral)) continue;
-    const slug = resolveReferralSource(rawReferral);
+    const slug = resolveReferralSource(
+      docs.find((d) => d.referral_source)?.referral_source,
+    );
+    if (slug !== APP_REFERRAL_SCOPE) continue;
     counts[slug] = (counts[slug] ?? 0) + 1;
   }
-  return buildReferralLeaderboard(counts);
+  return buildReferralLeaderboard(counts).filter(
+    (row) => row.slug === APP_REFERRAL_SCOPE,
+  );
 }
 
 /** Ranking por hojas de vida llenadas vía link de captación. */
@@ -1195,17 +1225,19 @@ export async function getReferralLinkLeaderboard(): Promise<
   const { data, error } = await supabase
     .from("users_documents")
     .select("referral_source")
-    .not("referral_source", "is", null);
+    .eq("referral_source", APP_REFERRAL_SCOPE);
 
   if (error) throw new Error(error.message);
 
   const counts: Record<string, number> = {};
   for (const row of data ?? []) {
     const slug = row.referral_source as string | null;
-    if (!slug || isHiddenReferral(slug)) continue;
+    if (!slug) continue;
     counts[slug] = (counts[slug] ?? 0) + 1;
   }
-  return buildReferralLeaderboard(counts);
+  return buildReferralLeaderboard(counts).filter(
+    (row) => row.slug === APP_REFERRAL_SCOPE,
+  );
 }
 
 /** Visitas asignadas/completadas + ranking de visitadores por completadas. */
@@ -1269,9 +1301,9 @@ export async function getEquipoVisitasDetalle(): Promise<
       : user?.users_documents
         ? [user.users_documents]
         : [];
-    const slug = resolveReferralSource(
-      docs.find((d) => d.referral_source)?.referral_source,
-    );
+    const rawReferral = docs.find((d) => d.referral_source)?.referral_source;
+    if (!isInReferralScope(rawReferral)) continue;
+    const slug = resolveReferralSource(rawReferral);
 
     const client = inboxClientFromUser(
       user,
@@ -1677,6 +1709,12 @@ export async function searchClients(
   const userIds = [...matchLabels.keys()];
   if (userIds.length === 0) return [];
 
+  const scopedIds = await scopedUserIds(supabase);
+  if (scopedIds.length === 0) return [];
+  const scopedSet = new Set(scopedIds);
+  const scopedMatchIds = userIds.filter((id) => scopedSet.has(id));
+  if (scopedMatchIds.length === 0) return [];
+
   const [{ data: users }, { data: paidTarifas }, { data: atrasos }] =
     await Promise.all([
       supabase
@@ -1684,16 +1722,16 @@ export async function searchClients(
         .select(
           "id, user, users_documents(selfie_url, referral_source), user_moto_compra(id, modelo, color, placa, estado, bike_table(imagen_url)), visitas(cliente_nombre), digital_contracts(hoja_vida_data, contrato_data, created_at)",
         )
-        .in("id", userIds),
+        .in("id", scopedMatchIds),
       supabase
         .from("tarifas_pagadas")
         .select("user_id")
-        .in("user_id", userIds)
+        .in("user_id", scopedMatchIds)
         .eq("estado", "pagada"),
       supabase
         .from("atrasos")
         .select("user_id, dias_atraso")
-        .in("user_id", userIds),
+        .in("user_id", scopedMatchIds),
     ]);
 
   const paidCount = new Map<number, number>();
@@ -1707,7 +1745,7 @@ export async function searchClients(
     diasByUser.set(row.user_id as number, Number(row.dias_atraso) || 0);
   }
 
-  const results: ClientSearchResult[] = (users ?? []).flatMap((raw) => {
+  const results: ClientSearchResult[] = (users ?? []).map((raw) => {
     const user = raw as {
       id: number;
       user: string;
@@ -1756,9 +1794,6 @@ export async function searchClients(
     const docRaw = user.users_documents;
     const docs = Array.isArray(docRaw) ? docRaw : docRaw ? [docRaw] : [];
     const doc = docs[0] ?? null;
-    const rawReferral =
-      docs.find((d) => d.referral_source)?.referral_source ?? null;
-    if (isHiddenReferral(rawReferral)) return [];
 
     const visitaRaw = user.visitas;
     const visita = Array.isArray(visitaRaw) ? visitaRaw[0] : visitaRaw;
@@ -1789,25 +1824,27 @@ export async function searchClients(
       visita?.cliente_nombre?.trim() ||
       user.user;
 
-    return [
-      {
-        userId: user.id,
-        username: user.user,
-        displayName,
-        cedula,
-        placa: compra?.placa ?? null,
-        motoLabel: compra ? `${compra.modelo} · ${compra.color}` : null,
-        compraEstado: compra?.estado ?? null,
-        cuotasPagadas: paidCount.get(user.id) ?? 0,
-        diasAtraso: diasByUser.get(user.id) ?? 0,
-        matchLabel: matchLabels.get(user.id) ?? "—",
-        seleccionadoAt: null,
-        selfieUrl: doc?.selfie_url ? String(doc.selfie_url) : null,
-        motoImagenUrl: bike?.imagen_url ? String(bike.imagen_url) : null,
-        referralLabel:
-          referralLabel(resolveReferralSource(rawReferral)) ?? "Punto de venta",
-      },
-    ];
+    return {
+      userId: user.id,
+      username: user.user,
+      displayName,
+      cedula,
+      placa: compra?.placa ?? null,
+      motoLabel: compra ? `${compra.modelo} · ${compra.color}` : null,
+      compraEstado: compra?.estado ?? null,
+      cuotasPagadas: paidCount.get(user.id) ?? 0,
+      diasAtraso: diasByUser.get(user.id) ?? 0,
+      matchLabel: matchLabels.get(user.id) ?? "—",
+      seleccionadoAt: null,
+      selfieUrl: doc?.selfie_url ? String(doc.selfie_url) : null,
+      motoImagenUrl: bike?.imagen_url ? String(bike.imagen_url) : null,
+      referralLabel:
+        referralLabel(
+          resolveReferralSource(
+            docs.find((d) => d.referral_source)?.referral_source,
+          ),
+        ) ?? "Punto de venta",
+    };
   });
 
   return results.sort((a, b) =>
@@ -1820,12 +1857,16 @@ export async function listClientesMotoCredito(
 ): Promise<ClientSearchResult[]> {
   const supabase = createAdminClient();
 
+  const scopedIds = await scopedUserIds(supabase);
+  if (scopedIds.length === 0) return [];
+
   const { data: compras, error } = await supabase
     .from("user_moto_compra")
     .select(
       "id, modelo, color, placa, estado, seleccionado_at, user_id, bike_table(imagen_url), users(id, user, users_documents(selfie_url, referral_source), visitas(cliente_nombre), digital_contracts(hoja_vida_data, contrato_data, created_at))",
     )
     .neq("estado", "cancelada")
+    .in("user_id", scopedIds)
     .order("seleccionado_at", { ascending: false })
     .limit(limit);
 
@@ -1861,7 +1902,7 @@ export async function listClientesMotoCredito(
     );
   }
 
-  const results = compras.flatMap((raw) => {
+  const results = compras.map((raw) => {
     const compra = raw as unknown as {
       id: string;
       modelo: string;
@@ -1929,24 +1970,22 @@ export async function listClientesMotoCredito(
     const usersRaw = compra.users;
     const user = Array.isArray(usersRaw) ? usersRaw[0] : usersRaw;
     if (!user) {
-      return [
-        {
-          userId: compra.user_id,
-          username: String(compra.user_id),
-          displayName: String(compra.user_id),
-          cedula: null,
-          placa: compra.placa,
-          motoLabel: `${compra.modelo} · ${compra.color}`,
-          compraEstado: compra.estado,
-          cuotasPagadas: paidCount.get(compra.user_id) ?? 0,
-          diasAtraso: diasByCompra.get(compra.id) ?? 0,
-          matchLabel: "",
-          seleccionadoAt: compra.seleccionado_at,
-          selfieUrl: null,
-          motoImagenUrl: null,
-          referralLabel: "Punto de venta",
-        },
-      ];
+      return {
+        userId: compra.user_id,
+        username: String(compra.user_id),
+        displayName: String(compra.user_id),
+        cedula: null,
+        placa: compra.placa,
+        motoLabel: `${compra.modelo} · ${compra.color}`,
+        compraEstado: compra.estado,
+        cuotasPagadas: paidCount.get(compra.user_id) ?? 0,
+        diasAtraso: diasByCompra.get(compra.id) ?? 0,
+        matchLabel: "",
+        seleccionadoAt: compra.seleccionado_at,
+        selfieUrl: null,
+        motoImagenUrl: null,
+        referralLabel: "Punto de venta",
+      };
     }
 
     const visitaRaw = user.visitas;
@@ -1954,9 +1993,6 @@ export async function listClientesMotoCredito(
     const docRaw = user.users_documents;
     const docs = Array.isArray(docRaw) ? docRaw : docRaw ? [docRaw] : [];
     const doc = docs[0] ?? null;
-    const rawReferral =
-      docs.find((d) => d.referral_source)?.referral_source ?? null;
-    if (isHiddenReferral(rawReferral)) return [];
     const bikeRaw = compra.bike_table;
     const bike = Array.isArray(bikeRaw) ? bikeRaw[0] : bikeRaw;
 
@@ -1984,25 +2020,27 @@ export async function listClientesMotoCredito(
       visita?.cliente_nombre?.trim() ||
       user.user;
 
-    return [
-      {
-        userId: user.id,
-        username: user.user,
-        displayName,
-        cedula,
-        placa: compra.placa,
-        motoLabel: `${compra.modelo} · ${compra.color}`,
-        compraEstado: compra.estado,
-        cuotasPagadas: paidCount.get(user.id) ?? 0,
-        diasAtraso: diasByCompra.get(compra.id) ?? 0,
-        matchLabel: "",
-        seleccionadoAt: compra.seleccionado_at,
-        selfieUrl: doc?.selfie_url ? String(doc.selfie_url) : null,
-        motoImagenUrl: bike?.imagen_url ? String(bike.imagen_url) : null,
-        referralLabel:
-          referralLabel(resolveReferralSource(rawReferral)) ?? "Punto de venta",
-      },
-    ];
+    return {
+      userId: user.id,
+      username: user.user,
+      displayName,
+      cedula,
+      placa: compra.placa,
+      motoLabel: `${compra.modelo} · ${compra.color}`,
+      compraEstado: compra.estado,
+      cuotasPagadas: paidCount.get(user.id) ?? 0,
+      diasAtraso: diasByCompra.get(compra.id) ?? 0,
+      matchLabel: "",
+      seleccionadoAt: compra.seleccionado_at,
+      selfieUrl: doc?.selfie_url ? String(doc.selfie_url) : null,
+      motoImagenUrl: bike?.imagen_url ? String(bike.imagen_url) : null,
+      referralLabel:
+        referralLabel(
+          resolveReferralSource(
+            docs.find((d) => d.referral_source)?.referral_source,
+          ),
+        ) ?? "Punto de venta",
+    };
   });
 
   return results.sort((a, b) => {

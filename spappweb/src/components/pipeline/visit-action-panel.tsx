@@ -6,6 +6,7 @@ import { ExternalLink, MapPin } from "lucide-react";
 import { assignVisit, cancelVisit } from "@/lib/actions/admin-actions";
 import type { VisitaRow, VisitadorRow, UserMotoCompraRow } from "@/lib/pipeline/types";
 import {
+  APP_REFERRAL_SCOPE,
   filterVisitadoresForReferral,
   referralLabel,
   resolveReferralSource,
@@ -54,8 +55,11 @@ export function VisitActionPanel({
     referralSource,
   );
   const referralSlug = resolveReferralSource(referralSource);
+  // Lock por nombre solo fuera del scope de este deploy (p. ej. yhosmer legacy).
   const lockedReferralLabel =
-    referralSlug === "punto-de-venta" ? null : referralLabel(referralSlug);
+    referralSlug === "punto-de-venta" || referralSlug === APP_REFERRAL_SCOPE
+      ? null
+      : referralLabel(referralSlug);
 
   if (!visita) {
     return (

@@ -2,7 +2,7 @@
 
 import { Copy, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
-import { REFERRAL_SOURCES } from "@/lib/referrals";
+import { APP_REFERRAL_SCOPE, REFERRAL_SOURCES } from "@/lib/referrals";
 import { hojaVidaUrl } from "@/lib/utils/site-url";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,14 +14,13 @@ import {
 } from "@/components/ui/card";
 
 export function EquipoReferralCards() {
+  // ponytail: este deploy solo muestra el link de Guillén
+  const sources = REFERRAL_SOURCES.filter((s) => s.slug === APP_REFERRAL_SCOPE);
+
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {REFERRAL_SOURCES.map((source) => {
-        // Punto de venta: /hojadevida sin ref (también vale ?ref=punto-de-venta).
-        const link =
-          source.slug === "punto-de-venta"
-            ? hojaVidaUrl()
-            : hojaVidaUrl(source.slug);
+      {sources.map((source) => {
+        const link = hojaVidaUrl(source.slug);
 
         function copy() {
           navigator.clipboard
@@ -35,9 +34,8 @@ export function EquipoReferralCards() {
             <CardHeader>
               <CardTitle>{source.label}</CardTitle>
               <CardDescription>
-                {source.slug === "punto-de-venta"
-                  ? "Link del local: /hojadevida (con o sin ?ref=punto-de-venta)."
-                  : "Cada hoja de vida por este link queda registrada a su nombre para comisiones."}
+                Cada hoja de vida por este link queda registrada a tu nombre.
+                Puedes asignar la visita a cualquier visitador de tu equipo.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">

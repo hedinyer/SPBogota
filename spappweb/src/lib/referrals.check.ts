@@ -1,9 +1,10 @@
 import assert from "node:assert";
 import {
+  APP_REFERRAL_SCOPE,
   assertVisitadorAllowedForReferral,
   buildReferralLeaderboard,
   filterVisitadoresForReferral,
-  isHiddenReferral,
+  isInReferralScope,
   parseReferralSource,
   rankLeaderboard,
   referralLabel,
@@ -11,38 +12,46 @@ import {
   visitadorMatchesReferral,
 } from "./referrals";
 
-assert.equal(parseReferralSource("guillen"), null);
-assert.equal(isHiddenReferral("guillen"), true);
-assert.equal(isHiddenReferral("Guillen"), true);
-assert.equal(isHiddenReferral("yhosmer"), false);
-assert.equal(isHiddenReferral(null), false);
+assert.equal(APP_REFERRAL_SCOPE, "guillen");
+assert.equal(isInReferralScope("guillen"), true);
+assert.equal(isInReferralScope("yhosmer"), false);
+assert.equal(isInReferralScope(null), false);
+assert.deepEqual(
+  ["guillen", "yhosmer", "fabian", null].filter((s) => isInReferralScope(s)),
+  ["guillen"],
+);
+
+assert.equal(parseReferralSource("guillen"), "guillen");
 assert.equal(parseReferralSource("Yhosmer"), "yhosmer");
 assert.equal(parseReferralSource("fabian"), "fabian");
 assert.equal(parseReferralSource("punto-de-venta"), "punto-de-venta");
 assert.equal(parseReferralSource("hacker"), null);
+assert.equal(referralLabel("guillen"), "Guillen");
 assert.equal(referralLabel("fabian"), "Fabian");
-assert.equal(resolveReferralSource(null), "punto-de-venta");
-assert.equal(resolveReferralSource(""), "punto-de-venta");
-assert.equal(resolveReferralSource("guillen"), "punto-de-venta");
+assert.equal(resolveReferralSource(null), "guillen");
+assert.equal(resolveReferralSource(""), "guillen");
+assert.equal(resolveReferralSource("guillen"), "guillen");
+assert.equal(resolveReferralSource("hacker"), "guillen");
 
 const board = buildReferralLeaderboard({
+  guillen: 5,
   yhosmer: 5,
-  fabian: 5,
   "punto-de-venta": 2,
 });
 assert.equal(board[0].rank, 1);
 assert.equal(board[1].rank, 1);
 assert.equal(board[2].rank, 3);
 assert.equal(board[2].slug, "punto-de-venta");
-assert.equal(board.length, 3);
+assert.equal(board[3].slug, "fabian");
+assert.equal(board[3].count, 0);
 
 const visitadores = [
   { id: 1, nombre: "Guillen" },
   { id: 2, nombre: "Yhosmer" },
   { id: 3, nombre: "Fabian" },
-  { id: 4, nombre: "Otro" },
+  { id: 4, nombre: "Ayudante" },
 ];
-// Guillen ya no es fuente conocida → se trata como punto de venta (todos).
+// Guillen (APP_REFERRAL_SCOPE): todo el equipo (él + ayudantes).
 assert.deepEqual(
   filterVisitadoresForReferral(visitadores, "guillen").map((v) => v.id),
   [1, 2, 3, 4],
@@ -60,15 +69,15 @@ assert.deepEqual(
   filterVisitadoresForReferral(visitadores, null).map((v) => v.id),
   [1, 2, 3, 4],
 );
-assert.equal(visitadorMatchesReferral("Yhosmer", "yhosmer"), true);
+assert.equal(visitadorMatchesReferral("Guillen", "guillen"), true);
 assert.throws(
   () => assertVisitadorAllowedForReferral("Otro", "yhosmer"),
   /referido por Yhosmer/,
 );
-assertVisitadorAllowedForReferral("Yhosmer", "yhosmer");
+assertVisitadorAllowedForReferral("Ayudante", "guillen");
+assertVisitadorAllowedForReferral("Guillen", "guillen");
 assertVisitadorAllowedForReferral("Otro", "fabian");
 assertVisitadorAllowedForReferral("Otro", "punto-de-venta");
-assertVisitadorAllowedForReferral("Otro", "guillen");
 
 const visitadoresBoard = rankLeaderboard([
   { slug: "1", label: "Guillen", count: 3 },
