@@ -3,8 +3,9 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { emitPipelineEvent } from "@/lib/agent/pipeline-events";
-import { calcMotoPayment } from "@/lib/moto-payment";
+import { calcMotoPayment, MIN_CUOTA_INICIAL } from "@/lib/moto-payment";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { formatCop } from "@/lib/utils/format";
 
 function motoAdminData(compra: {
   modelo: string;
@@ -135,7 +136,7 @@ const assignMotoSchema = z.object({
   placa: z.string().trim().min(1).optional(),
   chasis: z.string().trim().min(1).optional(),
   referencia: z.string().trim().optional(),
-  cuotaInicial: z.number().int().min(0).optional(),
+  cuotaInicial: z.number().int().min(MIN_CUOTA_INICIAL).optional(),
   cuotaDiaria: z.number().int().positive().optional(),
   montoVisita: z.number().int().min(0).optional(),
 });
@@ -172,9 +173,9 @@ export async function assignMotoByAdminOp(
   const cuotaDiaria = parsed.cuotaDiaria ?? (bike.cuota_diaria as number);
   const montoVisita = parsed.montoVisita ?? (bike.monto_visita as number);
 
-  if (cuotaInicial < (bike.cuota_inicial as number)) {
+  if (cuotaInicial < MIN_CUOTA_INICIAL) {
     throw new Error(
-      `La cuota inicial no puede ser menor a ${bike.cuota_inicial} (catálogo).`,
+      `La cuota inicial no puede ser menor a ${formatCop(MIN_CUOTA_INICIAL)}.`,
     );
   }
   if (cuotaDiaria <= 0) {

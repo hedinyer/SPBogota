@@ -11,6 +11,7 @@ import {
   emitPipelineEvent,
 } from "@/lib/agent/pipeline-events";
 import { canChooseFlowOrder } from "@/lib/pipeline/step-logic";
+import { MIN_CUOTA_INICIAL } from "@/lib/moto-payment";
 import { MONTO_VISITA_DEFAULT } from "@/lib/payments/visita-monto";
 import type { VisitaRow, UserMotoCompraRow } from "@/lib/pipeline/types";
 import {
@@ -130,7 +131,7 @@ const assignMotoSchema = z.object({
   placa: z.string().trim().optional(),
   chasis: z.string().trim().min(1),
   referencia: z.string().trim().optional(),
-  cuotaInicial: z.number().int().min(0).optional(),
+  cuotaInicial: z.number().int().min(MIN_CUOTA_INICIAL).optional(),
   cuotaDiaria: z.number().int().positive().optional(),
   montoVisita: z.number().int().min(0).optional(),
 });

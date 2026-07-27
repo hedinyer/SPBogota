@@ -6,6 +6,7 @@ import { assignMotoByAdmin } from "@/lib/actions/admin-actions";
 import {
   calcMotoPayment,
   cuotaDiariaFromPeriodo,
+  MIN_CUOTA_INICIAL,
 } from "@/lib/moto-payment";
 import { MONTO_VISITA_DEFAULT } from "@/lib/payments/visita-monto";
 import type { BikeRow, FrecuenciaPago, UserMotoCompraRow } from "@/lib/pipeline/types";
@@ -108,16 +109,9 @@ export function AdminMotoAssignPanel({
               toast.error("Selecciona una moto.");
               return;
             }
-            if (!Number.isFinite(parsedInicial) || parsedInicial < 0) {
-              toast.error("Indica una cuota inicial válida.");
-              return;
-            }
-            if (
-              selectedBike &&
-              parsedInicial < selectedBike.cuota_inicial
-            ) {
+            if (!Number.isFinite(parsedInicial) || parsedInicial < MIN_CUOTA_INICIAL) {
               toast.error(
-                `La cuota inicial no puede ser menor a ${formatCop(selectedBike.cuota_inicial)} (catálogo).`,
+                `La cuota inicial mínima es ${formatCop(MIN_CUOTA_INICIAL)}.`,
               );
               return;
             }
@@ -195,8 +189,8 @@ export function AdminMotoAssignPanel({
                     placeholder={String(selectedBike.cuota_inicial)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Mínimo {formatCop(selectedBike.cuota_inicial)}. Puede ser
-                    mayor si el cliente aporta más inicial.
+                    Mínimo {formatCop(MIN_CUOTA_INICIAL)}. Puede ser mayor si el
+                    cliente aporta más inicial.
                   </p>
                 </div>
                 <div className="flex flex-col gap-2">
