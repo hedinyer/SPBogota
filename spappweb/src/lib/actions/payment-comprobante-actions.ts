@@ -27,6 +27,7 @@ import type {
   PagoRow,
   UserMotoCompraRow,
 } from "@/lib/pipeline/types";
+import { BANCO_ORIGEN_LABELS } from "@/lib/pipeline/types";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -212,7 +213,14 @@ const confirmPagoSchema = z.object({
   monto: z.number().int().positive("El monto debe ser mayor a 0"),
   fechaComprobante: z.string().optional(),
   medioPagoAdmin: z.enum(MEDIO_PAGO_ADMIN_VALUES),
-  bancoOrigen: z.enum(["nequi", "davivienda", "otro"]),
+  bancoOrigen: z.enum([
+    "nequi",
+    "davivienda",
+    "bancolombia",
+    "banco_bogota",
+    "pse",
+    "otro",
+  ]),
   entradaManual: z.boolean(),
   notas: z.string().optional(),
 });
@@ -338,7 +346,9 @@ export async function confirmPagoConComprobante(
   const notasAdmin = [
     parsed.notas?.trim(),
     parsed.entradaManual ? "Entrada manual" : null,
-    parsed.bancoOrigen === "otro" ? "Otro banco" : null,
+    parsed.bancoOrigen !== "nequi" && parsed.bancoOrigen !== "davivienda"
+      ? BANCO_ORIGEN_LABELS[parsed.bancoOrigen]
+      : null,
   ]
     .filter(Boolean)
     .join(" · ") || null;

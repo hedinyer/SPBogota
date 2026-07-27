@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -8,6 +8,7 @@ import {
   confirmPagoConComprobante,
 } from "@/lib/actions/payment-comprobante-actions";
 import { ocrReceiptFile } from "@/lib/payments/receipt-ocr-client";
+import type { BancoDetectado } from "@/lib/payments/receipt-parser";
 import { isReferenciaDuplicada } from "@/lib/payments/referencia";
 import {
   printCreditoPagoReceipt,
@@ -78,6 +79,11 @@ function nowDatetimeLocal(): string {
   return toDatetimeLocal(new Date().toISOString());
 }
 
+function bancoFromDetectado(detected: BancoDetectado): BancoOrigen | null {
+  if (!detected || detected === "otro") return null;
+  return detected;
+}
+
 export function PaymentComprobanteDialog({
   open,
   onOpenChange,
@@ -109,6 +115,7 @@ export function PaymentComprobanteDialog({
   const [entradaManual, setEntradaManual] = useState(false);
   const [referenciaDuplicada, setReferenciaDuplicada] = useState(false);
   const [checkingReferencia, setCheckingReferencia] = useState(false);
+  const ocrFileKeyRef = useRef<string | null>(null);
 
   const presencial = isPresencialMedio(medioPagoAdmin);
 
@@ -158,6 +165,7 @@ export function PaymentComprobanteDialog({
     setFecha("");
     setConfidence(null);
     setEntradaManual(false);
+    ocrFileKeyRef.current = null;
   }, [open, sugeridoMonto]);
 
   useEffect(() => {
@@ -169,7 +177,6 @@ export function PaymentComprobanteDialog({
     setBancoOrigen(value);
     if (value === "otro") {
       setEntradaManual(true);
-      setConfidence(null);
     }
   }
 
@@ -179,41 +186,67 @@ export function PaymentComprobanteDialog({
       setFile(null);
       setBancoOrigen("nequi");
       setConfidence(null);
+      ocrFileKeyRef.current = null;
       if (!fecha) setFecha(nowDatetimeLocal());
     }
   }
 
-  function analyzeComprobante() {
-    if (!file) {
+  function applyOcrResult(
+    result: Awaited<ReturnType<typeof ocrReceiptFile>>,
+    currentMonto: string,
+  ) {
+    setConfidence(result.confidence);
+    if (result.referencia) setReferencia(result.referencia);
+    if (result.monto) setMonto(String(result.monto));
+    else if (montoEsperado && !currentMonto) setMonto(String(montoEsperado));
+    if (result.fechaComprobante) {
+      setFecha(toDatetimeLocal(result.fechaComprobante));
+    }
+    const mapped = bancoFromDetectado(result.bancoDetectado);
+    if (mapped) setBancoOrigen(mapped);
+    else if (result.bancoDetectado === null && result.confidence > 0) {
+      setBancoOrigen("otro");
+    }
+
+    if (result.confidence < 3) {
+      toast.warning(
+        "OCR incompleto. Revisa y completa los datos manualmente.",
+      );
+    } else {
+      toast.success("Comprobante analizado. Revisa los datos.");
+    }
+  }
+
+  function analyzeComprobante(targetFile?: File | null) {
+    const image = targetFile ?? file;
+    if (!image) {
       toast.error("Selecciona una imagen primero.");
       return;
     }
 
+    const fileKey = `${image.name}:${image.size}:${image.lastModified}`;
+    ocrFileKeyRef.current = fileKey;
+
     startOcrTransition(async () => {
       try {
-        const result = await ocrReceiptFile(file);
-
-        setConfidence(result.confidence);
-        if (result.referencia) setReferencia(result.referencia);
-        if (result.monto) setMonto(String(result.monto));
-        else if (montoEsperado && !monto) setMonto(String(montoEsperado));
-        if (result.fechaComprobante) {
-          setFecha(toDatetimeLocal(result.fechaComprobante));
-        }
-        if (result.bancoDetectado === "nequi") setBancoOrigen("nequi");
-        if (result.bancoDetectado === "davivienda") setBancoOrigen("davivienda");
-
-        if (bancoOrigen !== "otro" && result.confidence < 3) {
-          toast.warning(
-            "OCR incompleto. Revisa y completa los datos manualmente.",
-          );
-        } else if (bancoOrigen !== "otro") {
-          toast.success("Comprobante analizado. Revisa los datos.");
-        }
+        const result = await ocrReceiptFile(image);
+        if (ocrFileKeyRef.current !== fileKey) return;
+        applyOcrResult(result, monto);
       } catch (e) {
+        if (ocrFileKeyRef.current !== fileKey) return;
         toast.error(e instanceof Error ? e.message : "Error al analizar.");
       }
     });
+  }
+
+  function handleFileChange(next: File | null) {
+    setFile(next);
+    setConfidence(null);
+    if (!next) {
+      ocrFileKeyRef.current = null;
+      return;
+    }
+    analyzeComprobante(next);
   }
 
   function submit() {
@@ -225,11 +258,7 @@ export function PaymentComprobanteDialog({
       toast.error("Ingresa la referencia.");
       return;
     }
-    if (
-      !presencial &&
-      referencia.trim() &&
-      referenciaDuplicada
-    ) {
+    if (!presencial && referencia.trim() && referenciaDuplicada) {
       toast.error("Esta referencia ya fue usada en otro pago de este cliente.");
       return;
     }
@@ -294,10 +323,7 @@ export function PaymentComprobanteDialog({
   }
 
   const showOcrWarning =
-    !presencial &&
-    bancoOrigen !== "otro" &&
-    confidence !== null &&
-    confidence < 3;
+    !presencial && confidence !== null && confidence < 3;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -337,7 +363,7 @@ export function PaymentComprobanteDialog({
               <ImageFileField
                 label="Comprobante de pago"
                 file={file}
-                onFileChange={setFile}
+                onFileChange={handleFileChange}
                 disabled={pending || ocrPending}
                 enableDialogPaste
                 enableCamera
@@ -361,19 +387,12 @@ export function PaymentComprobanteDialog({
                 />
               </div>
 
-              {bancoOrigen === "otro" && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                  Comprobante de otro banco: sube la foto e ingresa referencia,
-                  monto y fecha manualmente.
-                </div>
-              )}
-
-              {file && bancoOrigen !== "otro" && (
+              {file && (
                 <Button
                   type="button"
                   variant="outline"
                   disabled={pending || ocrPending}
-                  onClick={analyzeComprobante}
+                  onClick={() => analyzeComprobante()}
                 >
                   {ocrPending ? (
                     <>
@@ -425,7 +444,9 @@ export function PaymentComprobanteDialog({
               referencia.trim() &&
               !referenciaDuplicadaLocal &&
               !presencial && (
-                <p className="text-xs text-muted-foreground">Verificando referencia…</p>
+                <p className="text-xs text-muted-foreground">
+                  Verificando referencia…
+                </p>
               )}
             {referenciaDuplicada && !presencial && (
               <p className="text-xs font-medium text-destructive">

@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ClipboardPaste, Camera, ImagePlus, X } from "lucide-react";
+import { compressImageFile } from "@/lib/utils/compress-image-file";
 import { uploadImageFromBrowser } from "@/lib/utils/upload-image-client";
 import type { AdminImageBucket } from "@/lib/supabase/storage-buckets";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
+const MAX_INPUT_BYTES = 12 * 1024 * 1024;
 const MAX_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
@@ -43,7 +45,7 @@ function extensionForMime(mime: string): string {
 
 function validateImageFile(file: File): string | null {
   if (file.size === 0) return "La imagen está vacía.";
-  if (file.size > 12 * 1024 * 1024) {
+  if (file.size > MAX_INPUT_BYTES) {
     return "La imagen no puede superar 12 MB.";
   }
   const type = file.type.toLowerCase();
@@ -55,6 +57,14 @@ function validateImageFile(file: File): string | null {
     return null;
   }
   return "Selecciona un archivo de imagen.";
+}
+
+async function prepareImageFile(file: File): Promise<File> {
+  const compressed = await compressImageFile(normalizeImageFile(file));
+  if (compressed.size > MAX_BYTES) {
+    throw new Error("La imagen comprimida supera 5 MB. Usa otra foto.");
+  }
+  return compressed;
 }
 
 function normalizeImageFile(file: File): File {
@@ -103,12 +113,13 @@ function fileFromClipboardData(
   return null;
 }
 
-function applyPastedFile(
+async function applyPastedFile(
   rawFile: File | null,
   onFileChange: (file: File | null) => void,
   setPasteError: (msg: string | null) => void,
   inputRef: React.RefObject<HTMLInputElement | null>,
-): boolean {
+  onFileSelected?: (file: File) => void | Promise<void>,
+): Promise<boolean> {
   if (!rawFile) return false;
 
   const error = validateImageFile(rawFile);
@@ -117,10 +128,17 @@ function applyPastedFile(
     return false;
   }
 
-  setPasteError(null);
-  onFileChange(rawFile);
-  if (inputRef.current) inputRef.current.value = "";
-  return true;
+  try {
+    const prepared = await prepareImageFile(rawFile);
+    setPasteError(null);
+    onFileChange(prepared);
+    void onFileSelected?.(prepared);
+    if (inputRef.current) inputRef.current.value = "";
+    return true;
+  } catch (e) {
+    setPasteError(e instanceof Error ? e.message : "No se pudo procesar la imagen.");
+    return false;
+  }
 }
 
 export function ImageFileField({
@@ -183,23 +201,32 @@ export function ImageFileField({
       const pasted = fileFromClipboardData(e.clipboardData);
       if (!pasted) return;
 
-      if (
-        applyPastedFile(pasted, onFileChange, setPasteError, inputRef)
-      ) {
-        e.preventDefault();
-      }
+      e.preventDefault();
+      void applyPastedFile(
+        pasted,
+        onFileChange,
+        setPasteError,
+        inputRef,
+        onFileSelected,
+      );
     }
 
     document.addEventListener("paste", handleDocumentPaste);
     return () => document.removeEventListener("paste", handleDocumentPaste);
-  }, [disabled, enableDialogPaste, onFileChange]);
+  }, [disabled, enableDialogPaste, onFileChange, onFileSelected]);
 
   function handlePasteEvent(e: React.ClipboardEvent) {
     if (disabled) return;
     const pasted = fileFromClipboardData(e.clipboardData);
-    if (applyPastedFile(pasted, onFileChange, setPasteError, inputRef)) {
-      e.preventDefault();
-    }
+    if (!pasted) return;
+    e.preventDefault();
+    void applyPastedFile(
+      pasted,
+      onFileChange,
+      setPasteError,
+      inputRef,
+      onFileSelected,
+    );
   }
 
   async function pasteFromClipboard() {
@@ -216,7 +243,15 @@ export function ImageFileField({
             `comprobante-pegado-${Date.now()}.${extensionForMime(type)}`,
             { type },
           );
-          if (applyPastedFile(pasted, onFileChange, setPasteError, inputRef)) {
+          if (
+            await applyPastedFile(
+              pasted,
+              onFileChange,
+              setPasteError,
+              inputRef,
+              onFileSelected,
+            )
+          ) {
             return;
           }
         }
@@ -227,23 +262,29 @@ export function ImageFileField({
     }
   }
 
-  function selectFile(selected: File | null) {
+  async function selectFile(selected: File | null) {
     if (!selected) {
       onFileChange(null);
       return;
     }
-    const normalized = normalizeImageFile(selected);
-    const error = validateImageFile(normalized);
+    const error = validateImageFile(selected);
     if (error) {
       setPasteError(error);
       return;
     }
-    setPasteError(null);
-    const reader = new FileReader();
-    reader.onload = () => setPreview(String(reader.result));
-    reader.readAsDataURL(normalized);
-    onFileChange(normalized);
-    void onFileSelected?.(normalized);
+    try {
+      const prepared = await prepareImageFile(selected);
+      setPasteError(null);
+      const reader = new FileReader();
+      reader.onload = () => setPreview(String(reader.result));
+      reader.readAsDataURL(prepared);
+      onFileChange(prepared);
+      void onFileSelected?.(prepared);
+    } catch (e) {
+      setPasteError(
+        e instanceof Error ? e.message : "No se pudo procesar la imagen.",
+      );
+    }
   }
 
   return (

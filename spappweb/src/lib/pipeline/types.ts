@@ -532,7 +532,13 @@ export const MEDIO_PAGO_ADMIN_OPTIONS: MedioPagoAdmin[] = [
   "efectivo",
   "datafono",
 ];
-export type BancoOrigen = "nequi" | "davivienda" | "otro";
+export type BancoOrigen =
+  | "nequi"
+  | "davivienda"
+  | "bancolombia"
+  | "banco_bogota"
+  | "pse"
+  | "otro";
 export type PagoEstado = "pendiente_confirmacion" | "confirmado" | "rechazado";
 
 export interface PagoRow {
@@ -578,6 +584,9 @@ export const MEDIO_PAGO_ADMIN_LABELS: Record<MedioPagoAdminStored, string> = {
 export const BANCO_ORIGEN_LABELS: Record<BancoOrigen, string> = {
   nequi: "Nequi",
   davivienda: "Davivienda / Daviplata",
+  bancolombia: "Bancolombia",
+  banco_bogota: "Banco de Bogotá",
+  pse: "PSE / Bre-B",
   otro: "Otro banco",
 };
 
