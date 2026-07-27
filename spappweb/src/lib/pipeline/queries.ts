@@ -521,16 +521,39 @@ function sinVisitaSubtitle(
 }
 
 /** Syncs morosos / motos_para_recoger from vista atrasos (cron alone leaves cancelada stuck). */
+// ponytail: throttle 60s in-memory; upgrade to Redis/pg advisory lock if multi-instance drift matters
+let lastMoraSyncAt = 0;
+let moraSyncInFlight: Promise<void> | null = null;
+const MORA_SYNC_TTL_MS = 60_000;
+
+function kickMoraSync(supabase: ReturnType<typeof createAdminClient>): void {
+  void ensureMoraSynced(supabase).catch(() => {});
+}
+
 async function ensureMoraSynced(
   supabase: ReturnType<typeof createAdminClient>,
 ): Promise<void> {
-  const { error } = await supabase.rpc("evaluar_mora_diaria");
-  if (error) throw new Error(error.message);
+  const now = Date.now();
+  if (now - lastMoraSyncAt < MORA_SYNC_TTL_MS) return;
+  if (moraSyncInFlight) return moraSyncInFlight;
+
+  lastMoraSyncAt = now;
+  moraSyncInFlight = (async () => {
+    const { error } = await supabase.rpc("evaluar_mora_diaria");
+    if (error) {
+      lastMoraSyncAt = 0;
+      throw new Error(error.message);
+    }
+  })().finally(() => {
+    moraSyncInFlight = null;
+  });
+
+  return moraSyncInFlight;
 }
 
 export async function getInboxQueues(): Promise<InboxQueue[]> {
   const supabase = createAdminClient();
-  await ensureMoraSynced(supabase);
+  kickMoraSync(supabase);
 
   const [
     creditosIds,
@@ -1565,42 +1588,63 @@ export async function getGarajeMotosDisponiblesCredito(): Promise<
   );
 }
 
+type GarajeMantenimientoItemQueryRow = GarajeMantenimientoItemRow & {
+  inventario_productos:
+    | { nombre: string; sku: string | null }
+    | { nombre: string; sku: string | null }[]
+    | null;
+};
+
+function mapGarajeMantenimientoItem(
+  row: GarajeMantenimientoItemQueryRow,
+): GarajeMantenimientoItemRow {
+  const prod = Array.isArray(row.inventario_productos)
+    ? row.inventario_productos[0]
+    : row.inventario_productos;
+  return {
+    id: row.id,
+    garaje_moto_id: row.garaje_moto_id,
+    producto_id: row.producto_id,
+    cantidad: row.cantidad,
+    costo_unitario: row.costo_unitario,
+    notas: row.notas,
+    created_at: row.created_at,
+    created_by: row.created_by,
+    producto_nombre: prod?.nombre ?? null,
+    producto_sku: prod?.sku ?? null,
+  };
+}
+
 export async function getGarajeMantenimientoItems(
   garajeMotoId: string,
 ): Promise<GarajeMantenimientoItemRow[]> {
+  const byMoto = await getGarajeMantenimientoItemsByMotoIds([garajeMotoId]);
+  return byMoto[garajeMotoId] ?? [];
+}
+
+export async function getGarajeMantenimientoItemsByMotoIds(
+  garajeMotoIds: string[],
+): Promise<Record<string, GarajeMantenimientoItemRow[]>> {
+  if (garajeMotoIds.length === 0) return {};
+
   const supabase = createAdminClient();
   const { data } = await supabase
     .from("garaje_mantenimiento_items")
     .select(
       "id, garaje_moto_id, producto_id, cantidad, costo_unitario, notas, created_at, created_by, inventario_productos(nombre, sku)",
     )
-    .eq("garaje_moto_id", garajeMotoId)
+    .in("garaje_moto_id", garajeMotoIds)
     .order("created_at", { ascending: false });
 
-  return ((data ?? []) as unknown as Array<
-    GarajeMantenimientoItemRow & {
-      inventario_productos:
-        | { nombre: string; sku: string | null }
-        | { nombre: string; sku: string | null }[]
-        | null;
-    }
-  >).map((row) => {
-    const prod = Array.isArray(row.inventario_productos)
-      ? row.inventario_productos[0]
-      : row.inventario_productos;
-    return {
-      id: row.id,
-      garaje_moto_id: row.garaje_moto_id,
-      producto_id: row.producto_id,
-      cantidad: row.cantidad,
-      costo_unitario: row.costo_unitario,
-      notas: row.notas,
-      created_at: row.created_at,
-      created_by: row.created_by,
-      producto_nombre: prod?.nombre ?? null,
-      producto_sku: prod?.sku ?? null,
-    };
-  });
+  const byMoto: Record<string, GarajeMantenimientoItemRow[]> = {};
+  for (const id of garajeMotoIds) byMoto[id] = [];
+
+  for (const row of (data ?? []) as unknown as GarajeMantenimientoItemQueryRow[]) {
+    const mapped = mapGarajeMantenimientoItem(row);
+    (byMoto[mapped.garaje_moto_id] ??= []).push(mapped);
+  }
+
+  return byMoto;
 }
 
 export async function getFirstPendingUserId(

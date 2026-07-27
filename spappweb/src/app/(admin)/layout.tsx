@@ -1,8 +1,6 @@
 import { AdminMobileNav } from "@/components/layout/admin-mobile-nav";
 import { AdminSidebar } from "@/components/layout/admin-sidebar";
 
-export const dynamic = "force-dynamic";
-
 export default function AdminLayout({
   children,
 }: {

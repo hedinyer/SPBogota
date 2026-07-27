@@ -37,19 +37,29 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const response = NextResponse.next();
 
-  const adminSession = await getIronSession<SessionData>(
-    request,
-    response,
-    sessionOptions,
-  );
-  const visitadorSession = await getIronSession<VisitadorSessionData>(
-    request,
-    response,
-    visitadorSessionOptions,
-  );
+  const needsAdminSession =
+    pathname === "/" ||
+    pathname === "/login" ||
+    adminProtectedPrefixes.some((p) => pathname.startsWith(p));
+  const needsVisitadorSession =
+    pathname === "/visitador/login" ||
+    visitadorProtectedPrefixes.some((p) => pathname.startsWith(p));
 
-  const isAdminLoggedIn = hasAdminAccess(adminSession);
-  const isVisitadorLoggedIn = hasVisitadorAccess(visitadorSession);
+  const adminSession = needsAdminSession
+    ? await getIronSession<SessionData>(request, response, sessionOptions)
+    : null;
+  const visitadorSession = needsVisitadorSession
+    ? await getIronSession<VisitadorSessionData>(
+        request,
+        response,
+        visitadorSessionOptions,
+      )
+    : null;
+
+  const isAdminLoggedIn = adminSession ? hasAdminAccess(adminSession) : false;
+  const isVisitadorLoggedIn = visitadorSession
+    ? hasVisitadorAccess(visitadorSession)
+    : false;
 
   const isAdminProtected = adminProtectedPrefixes.some((p) =>
     pathname.startsWith(p),

@@ -3,12 +3,11 @@
   getAllGarajeMotos,
   getAllGarajeParqueaderos,
   getAllProductos,
-  getGarajeMantenimientoItems,
+  getGarajeMantenimientoItemsByMotoIds,
 } from "@/lib/pipeline/queries";
 import { GarajeManager } from "@/components/garaje/garaje-manager";
 import { AdminHubSubnav } from "@/components/layout/admin-hub-subnav";
 import { PageHeader } from "@/components/layout/page-header";
-import type { GarajeMantenimientoItemRow } from "@/lib/pipeline/types";
 
 export default async function GarajePage({
   searchParams,
@@ -32,15 +31,9 @@ export default async function GarajePage({
       m.estado === "retenida",
   );
 
-  const mantenimientoEntries = await Promise.all(
-    motosConMantenimiento.map(async (m) => {
-      const items = await getGarajeMantenimientoItems(m.id);
-      return [m.id, items] as const;
-    }),
+  const mantenimientoByMoto = await getGarajeMantenimientoItemsByMotoIds(
+    motosConMantenimiento.map((m) => m.id),
   );
-
-  const mantenimientoByMoto: Record<string, GarajeMantenimientoItemRow[]> =
-    Object.fromEntries(mantenimientoEntries);
 
   return (
     <div className="flex flex-col gap-6">

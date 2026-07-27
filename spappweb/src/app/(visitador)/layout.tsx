@@ -6,8 +6,6 @@ import {
 } from "@/lib/auth/visitador-session";
 import { VisitadorLogoutButton } from "@/components/visitador/visitador-logout-button";
 
-export const dynamic = "force-dynamic";
-
 export const metadata: Metadata = {
   title: "Portal Visitador",
   description: "Visitas domiciliarias asignadas",
