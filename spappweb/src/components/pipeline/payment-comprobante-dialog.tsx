@@ -52,6 +52,8 @@ interface PaymentComprobanteDialogProps {
   clienteCedula?: string;
   motoModelo?: string;
   motoColor?: string;
+  /** Medio preseleccionado al abrir (p. ej. efectivo sin foto). */
+  initialMedioPago?: MedioPagoAdmin;
   onSuccess?: () => void;
 }
 
@@ -98,6 +100,7 @@ export function PaymentComprobanteDialog({
   clienteCedula = "",
   motoModelo = "",
   motoColor = "",
+  initialMedioPago = "nequi_nicolas",
   onSuccess,
 }: PaymentComprobanteDialogProps) {
   const sugeridoMonto = montoFaltante ?? montoEsperado;
@@ -107,7 +110,7 @@ export function PaymentComprobanteDialog({
   const [file, setFile] = useState<File | null>(null);
   const [bancoOrigen, setBancoOrigen] = useState<BancoOrigen>("nequi");
   const [medioPagoAdmin, setMedioPagoAdmin] =
-    useState<MedioPagoAdmin>("nequi_nicolas");
+    useState<MedioPagoAdmin>(initialMedioPago);
   const [referencia, setReferencia] = useState("");
   const [monto, setMonto] = useState("");
   const [fecha, setFecha] = useState("");
@@ -118,6 +121,7 @@ export function PaymentComprobanteDialog({
   const ocrFileKeyRef = useRef<string | null>(null);
 
   const presencial = isPresencialMedio(medioPagoAdmin);
+  const esEfectivo = medioPagoAdmin === "efectivo";
 
   const referenciaDuplicadaLocal = useMemo(
     () => isReferenciaDuplicada(referencia, referenciasUsadas),
@@ -159,14 +163,16 @@ export function PaymentComprobanteDialog({
     if (!open) return;
     setFile(null);
     setBancoOrigen("nequi");
-    setMedioPagoAdmin("nequi_nicolas");
+    setMedioPagoAdmin(initialMedioPago);
     setReferencia("");
     setMonto(sugeridoMonto ? String(sugeridoMonto) : "");
-    setFecha("");
+    setFecha(
+      isPresencialMedio(initialMedioPago) ? nowDatetimeLocal() : "",
+    );
     setConfidence(null);
-    setEntradaManual(false);
+    setEntradaManual(isPresencialMedio(initialMedioPago));
     ocrFileKeyRef.current = null;
-  }, [open, sugeridoMonto]);
+  }, [open, sugeridoMonto, initialMedioPago]);
 
   useEffect(() => {
     if (!open || !presencial) return;
@@ -356,7 +362,9 @@ export function PaymentComprobanteDialog({
           {presencial ? (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
               Pago presencial ({MEDIO_PAGO_ADMIN_LABELS[medioPagoAdmin]}). No
-              requiere comprobante digital; al guardar se imprime el recibo.
+              requiere foto ni referencia
+              {esEfectivo ? "" : " (voucher datáfono opcional)"}
+              ; al guardar se imprime el recibo.
             </div>
           ) : (
             <>
@@ -414,6 +422,7 @@ export function PaymentComprobanteDialog({
             </p>
           )}
 
+          {!esEfectivo && (
           <div className="flex flex-col gap-2">
             <Label htmlFor="referencia">
               {presencial ? "Referencia (opcional)" : "Referencia"}
@@ -427,9 +436,7 @@ export function PaymentComprobanteDialog({
               }}
               placeholder={
                 presencial
-                  ? medioPagoAdmin === "datafono"
-                    ? "Voucher datáfono (opcional)"
-                    : "Se genera automáticamente si queda vacío"
+                  ? "Voucher datáfono (opcional)"
                   : "Ej. M12636825"
               }
               disabled={pending || ocrPending}
@@ -454,6 +461,7 @@ export function PaymentComprobanteDialog({
               </p>
             )}
           </div>
+          )}
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="monto">Monto (COP)</Label>

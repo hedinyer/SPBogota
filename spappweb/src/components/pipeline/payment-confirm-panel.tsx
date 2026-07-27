@@ -24,7 +24,12 @@ import {
   type PrimerPagoConcepto,
 } from "@/lib/payments/primer-pago-progress";
 import { MONTO_VISITA_DEFAULT } from "@/lib/payments/visita-monto";
-import type { ContextoPago, PagoRow, UserMotoCompraRow } from "@/lib/pipeline/types";
+import type {
+  ContextoPago,
+  MedioPagoAdmin,
+  PagoRow,
+  UserMotoCompraRow,
+} from "@/lib/pipeline/types";
 import {
   CONTEXTO_PAGO_LABELS,
   MEDIO_PAGO_ADMIN_LABELS,
@@ -58,6 +63,8 @@ export function PaymentConfirmPanel({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogContexto, setDialogContexto] =
     useState<PrimerPagoConcepto>("inicial");
+  const [dialogMedio, setDialogMedio] =
+    useState<MedioPagoAdmin>("nequi_nicolas");
 
   if (!compra) {
     return (
@@ -84,8 +91,12 @@ export function PaymentConfirmPanel({
   const showVisitaSection =
     compra.monto_visita_monto > 0 || canEditMontoVisita;
 
-  function openAbonoDialog(contexto: PrimerPagoConcepto) {
+  function openAbonoDialog(
+    contexto: PrimerPagoConcepto,
+    medio: MedioPagoAdmin = "nequi_nicolas",
+  ) {
     setDialogContexto(contexto);
+    setDialogMedio(medio);
     setDialogOpen(true);
   }
 
@@ -139,6 +150,7 @@ export function PaymentConfirmPanel({
             clienteNombre={clienteNombre}
             clienteCedula={clienteCedula}
             onAddAbono={() => openAbonoDialog("inicial")}
+            onAddEfectivo={() => openAbonoDialog("inicial", "efectivo")}
           />
           <ConceptoAbonoSection
             compra={compra}
@@ -149,6 +161,9 @@ export function PaymentConfirmPanel({
             clienteNombre={clienteNombre}
             clienteCedula={clienteCedula}
             onAddAbono={() => openAbonoDialog("cuota_adelantada")}
+            onAddEfectivo={() =>
+              openAbonoDialog("cuota_adelantada", "efectivo")
+            }
           />
           {showVisitaSection && (
             <ConceptoAbonoSection
@@ -160,6 +175,7 @@ export function PaymentConfirmPanel({
               clienteNombre={clienteNombre}
               clienteCedula={clienteCedula}
               onAddAbono={() => openAbonoDialog("visita")}
+              onAddEfectivo={() => openAbonoDialog("visita", "efectivo")}
             />
           )}
         </CardContent>
@@ -178,6 +194,7 @@ export function PaymentConfirmPanel({
         clienteCedula={clienteCedula}
         motoModelo={compra.modelo}
         motoColor={compra.color}
+        initialMedioPago={dialogMedio}
       />
     </>
   );
@@ -267,6 +284,7 @@ function ConceptoAbonoSection({
   clienteNombre,
   clienteCedula,
   onAddAbono,
+  onAddEfectivo,
 }: {
   compra: UserMotoCompraRow;
   pagos: PagoRow[];
@@ -276,6 +294,7 @@ function ConceptoAbonoSection({
   clienteNombre: string;
   clienteCedula: string;
   onAddAbono: () => void;
+  onAddEfectivo: () => void;
 }) {
   const [pending, startTransition] = useTransition();
   const esperado = montoEsperadoConcepto(compra, contexto);
@@ -333,7 +352,7 @@ function ConceptoAbonoSection({
         </div>
         {completo ? (
           <span className="w-fit rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
-            Confirmado
+            {esperado > 0 ? "Confirmado" : "Sin cobro"}
           </span>
         ) : (
           <span className="w-fit rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900">
@@ -408,14 +427,24 @@ function ConceptoAbonoSection({
       )}
 
       {canEdit && !completo && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onAddAbono}
-        >
-          Agregar abono
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onAddAbono}
+          >
+            Agregar abono
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={onAddEfectivo}
+          >
+            Efectivo
+          </Button>
+        </div>
       )}
     </div>
   );
