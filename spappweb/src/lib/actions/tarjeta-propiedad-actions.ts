@@ -6,40 +6,14 @@ import { requireAdminSession } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { TarjetaPropiedadRow } from "@/lib/pipeline/types";
 
-const optionalText = z
-  .union([z.string(), z.null(), z.undefined()])
-  .transform((v) => {
-    if (v == null) return null;
-    const t = v.trim();
-    return t.length ? t : null;
-  });
-
 const createTarjetaSchema = z.object({
-  numero_licencia: optionalText,
-  placa: optionalText,
-  marca: optionalText,
-  linea: optionalText,
-  modelo: optionalText,
-  cilindrada: optionalText,
-  color: optionalText,
-  servicio: optionalText,
-  clase_vehiculo: optionalText,
-  tipo_carroceria: optionalText,
-  combustible: optionalText,
-  capacidad: optionalText,
-  numero_motor: optionalText,
-  motor_reg: optionalText,
-  vin: optionalText,
-  numero_serie: optionalText,
-  serie_reg: optionalText,
-  numero_chasis: optionalText,
-  chasis_reg: optionalText,
-  propietario: optionalText,
-  identificacion_tipo: optionalText,
-  identificacion_numero: optionalText,
+  placa: z
+    .string()
+    .trim()
+    .min(5, "Indica una placa válida")
+    .transform((v) => v.toUpperCase().replace(/\s+/g, "")),
   imagen_url: z.string().trim().min(1, "Foto del frente obligatoria"),
   imagen_reverso_url: z.string().trim().min(1, "Foto del reverso obligatoria"),
-  raw_ocr_text: optionalText,
 });
 
 export type CreateTarjetaPropiedadInput = z.infer<typeof createTarjetaSchema>;
@@ -89,44 +63,19 @@ export async function createTarjetaPropiedad(
   const parsed = createTarjetaSchema.parse(input);
   const supabase = createAdminClient();
 
-  const placa =
-    parsed.placa != null ? parsed.placa.toUpperCase().replace(/\s+/g, "") : null;
-
   const { data, error } = await supabase
     .from("tarjetas_propiedad")
     .insert({
-      numero_licencia: parsed.numero_licencia ?? null,
-      placa,
-      marca: parsed.marca ?? null,
-      linea: parsed.linea ?? null,
-      modelo: parsed.modelo ?? null,
-      cilindrada: parsed.cilindrada ?? null,
-      color: parsed.color ?? null,
-      servicio: parsed.servicio ?? null,
-      clase_vehiculo: parsed.clase_vehiculo ?? null,
-      tipo_carroceria: parsed.tipo_carroceria ?? null,
-      combustible: parsed.combustible ?? null,
-      capacidad: parsed.capacidad ?? null,
-      numero_motor: parsed.numero_motor ?? null,
-      motor_reg: parsed.motor_reg ?? null,
-      vin: parsed.vin ?? null,
-      numero_serie: parsed.numero_serie ?? null,
-      serie_reg: parsed.serie_reg ?? null,
-      numero_chasis: parsed.numero_chasis ?? null,
-      chasis_reg: parsed.chasis_reg ?? null,
-      propietario: parsed.propietario ?? null,
-      identificacion_tipo: parsed.identificacion_tipo ?? null,
-      identificacion_numero: parsed.identificacion_numero ?? null,
+      placa: parsed.placa,
       imagen_url: parsed.imagen_url,
       imagen_reverso_url: parsed.imagen_reverso_url,
-      raw_ocr_text: parsed.raw_ocr_text ?? null,
     })
     .select("*")
     .single();
 
   if (error) {
     if (error.code === "23505") {
-      throw new Error(`Ya existe una tarjeta con placa ${placa}.`);
+      throw new Error(`Ya existe una tarjeta con placa ${parsed.placa}.`);
     }
     throw new Error(error.message);
   }

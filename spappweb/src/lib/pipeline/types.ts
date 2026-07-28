@@ -688,7 +688,7 @@ export const SOLICITUD_ESTADO_LABELS: Record<SolicitudTallerEstado, string> = {
   cancelada: "Cancelada",
 };
 
-/** Licencia de Tránsito (tarjeta de propiedad) leída por OCR. */
+/** Licencia de Tránsito (tarjeta de propiedad) archivada con fotos. */
 export interface TarjetaPropiedadRow {
   id: string;
   numero_licencia: string | null;
