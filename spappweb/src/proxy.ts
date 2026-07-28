@@ -24,6 +24,7 @@ const adminProtectedPrefixes = [
   "/venta-contado",
   "/garaje",
   "/vendidas",
+  "/tarjetas-propiedad",
   "/historial-ventas",
   "/solicitudes",
 ];
@@ -121,6 +122,8 @@ export const config = {
     "/garaje/:path*",
     "/vendidas",
     "/vendidas/:path*",
+    "/tarjetas-propiedad",
+    "/tarjetas-propiedad/:path*",
     "/historial-ventas",
     "/historial-ventas/:path*",
     "/solicitudes/:path*",

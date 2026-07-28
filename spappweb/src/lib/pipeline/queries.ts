@@ -30,6 +30,7 @@ import type {
   RentingResumen,
   SolicitudTallerRow,
   TarifaPagadaRow,
+  TarjetaPropiedadRow,
   UserDocumentRow,
   UserMotoCompraRow,
   UserRow,
@@ -2114,4 +2115,15 @@ export async function getClienteFacturacion(
     montoVisita: (compra?.monto_visita_monto as number | undefined) ?? null,
     totalPrimerPago: (compra?.monto_total_primer_pago as number | undefined) ?? null,
   };
+}
+
+export async function getAllTarjetasPropiedad(): Promise<TarjetaPropiedadRow[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("tarjetas_propiedad")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as TarjetaPropiedadRow[];
 }

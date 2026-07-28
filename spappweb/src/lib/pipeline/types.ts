@@ -687,3 +687,37 @@ export const SOLICITUD_ESTADO_LABELS: Record<SolicitudTallerEstado, string> = {
   completada: "Completada",
   cancelada: "Cancelada",
 };
+
+/** Licencia de Tránsito (tarjeta de propiedad) leída por OCR. */
+export interface TarjetaPropiedadRow {
+  id: string;
+  numero_licencia: string | null;
+  placa: string | null;
+  marca: string | null;
+  linea: string | null;
+  modelo: string | null;
+  cilindrada: string | null;
+  color: string | null;
+  servicio: string | null;
+  clase_vehiculo: string | null;
+  tipo_carroceria: string | null;
+  combustible: string | null;
+  capacidad: string | null;
+  numero_motor: string | null;
+  motor_reg: string | null;
+  vin: string | null;
+  numero_serie: string | null;
+  serie_reg: string | null;
+  numero_chasis: string | null;
+  chasis_reg: string | null;
+  propietario: string | null;
+  identificacion_tipo: string | null;
+  identificacion_numero: string | null;
+  /** Anverso (frente). */
+  imagen_url: string;
+  /** Reverso. */
+  imagen_reverso_url: string | null;
+  raw_ocr_text: string | null;
+  created_at: string;
+  updated_at: string;
+}

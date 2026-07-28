@@ -4,6 +4,7 @@ import {
   ClipboardList,
   CreditCard,
   History,
+  IdCard,
   LogOut,
   Package,
   ShoppingBag,
@@ -55,6 +56,7 @@ export const adminNavGroups: AdminNavGroup[] = [
       { href: "/vendidas", label: "En calle", icon: ShoppingBag },
       { href: "/catalogo", label: "Modelos", icon: Bike },
       { href: "/venta-contado", label: "Contado", icon: Banknote },
+      { href: "/tarjetas-propiedad", label: "Tarjetas", icon: IdCard },
     ],
   },
   {
