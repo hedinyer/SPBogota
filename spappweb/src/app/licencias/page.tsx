@@ -94,6 +94,16 @@ export default async function LicenciasPage({
   );
 }
 
+/** Supabase Storage: ?download=nombre fuerza Content-Disposition attachment. */
+function storageDownloadHref(url: string, filename: string): string {
+  const parsed = new URL(url);
+  const ext =
+    parsed.pathname.match(/\.(jpe?g|png|webp|gif)$/i)?.[1]?.toLowerCase() ??
+    "jpg";
+  parsed.searchParams.set("download", `${filename}.${ext}`);
+  return parsed.toString();
+}
+
 function FotoDescarga({
   label,
   url,
@@ -114,8 +124,7 @@ function FotoDescarga({
       <figcaption className="flex items-center justify-between gap-2 px-3 pb-3">
         <span className="text-sm font-medium">{label}</span>
         <Button asChild size="sm" variant="outline">
-          {/* ponytail: cross-origin download may open tab; browser handles save */}
-          <a href={url} download={filename} target="_blank" rel="noopener noreferrer">
+          <a href={storageDownloadHref(url, filename)}>
             <Download data-icon="inline-start" />
             Descargar
           </a>
