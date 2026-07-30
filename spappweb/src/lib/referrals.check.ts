@@ -2,12 +2,15 @@ import assert from "node:assert";
 import {
   assertVisitadorAllowedForReferral,
   buildReferralLeaderboard,
+  commissionPeriodFromKey,
+  currentCommissionPeriod,
   filterVisitadoresForReferral,
   isHiddenReferral,
   parseReferralSource,
   rankLeaderboard,
   referralLabel,
   resolveReferralSource,
+  shiftCommissionPeriod,
   visitadorMatchesReferral,
 } from "./referrals";
 
@@ -84,5 +87,22 @@ const visitadoresBoard = rankLeaderboard([
 assert.equal(visitadoresBoard[0].rank, 1);
 assert.equal(visitadoresBoard[1].rank, 1);
 assert.equal(visitadoresBoard[2].rank, 3);
+
+const jul = commissionPeriodFromKey("2026-07");
+assert.ok(jul);
+assert.equal(jul!.key, "2026-07");
+assert.equal(jul!.startIso, new Date("2026-07-20T00:00:00.000-05:00").toISOString());
+assert.equal(jul!.endExclusiveIso, new Date("2026-08-06T00:00:00.000-05:00").toISOString());
+assert.match(jul!.label, /20.*– 5/);
+
+const midMonth = currentCommissionPeriod(new Date("2026-07-15T15:00:00-05:00"));
+assert.equal(midMonth.key, "2026-06"); // 20 jun → 5 jul (cerrado)
+const lateMonth = currentCommissionPeriod(new Date("2026-07-25T12:00:00-05:00"));
+assert.equal(lateMonth.key, "2026-07");
+const earlyMonth = currentCommissionPeriod(new Date("2026-08-03T12:00:00-05:00"));
+assert.equal(earlyMonth.key, "2026-07");
+
+assert.equal(shiftCommissionPeriod("2026-07", -1)?.key, "2026-06");
+assert.equal(shiftCommissionPeriod("2026-07", 1)?.key, "2026-08");
 
 console.log("referrals.check: ok");

@@ -1177,15 +1177,23 @@ export async function getAllVisitadores(): Promise<VisitadorRow[]> {
   return ((data ?? []) as unknown as VisitadorRow[]);
 }
 
-export async function getReferralLeaderboard(): Promise<
-  ReferralLeaderboardRow[]
-> {
+export async function getReferralLeaderboard(range?: {
+  startIso: string;
+  endExclusiveIso: string;
+}): Promise<ReferralLeaderboardRow[]> {
   const supabase = createAdminClient();
   // Solo clientes que ya compraron moto a crédito (no solo llenaron la hoja).
-  const { data, error } = await supabase
+  let q = supabase
     .from("user_moto_compra")
     .select("users!inner(users_documents(referral_source))")
     .neq("estado", "cancelada");
+  if (range) {
+    q = q
+      .gte("seleccionado_at", range.startIso)
+      .lt("seleccionado_at", range.endExclusiveIso);
+  }
+
+  const { data, error } = await q;
 
   if (error) throw new Error(error.message);
 
@@ -1216,14 +1224,22 @@ export async function getReferralLeaderboard(): Promise<
 }
 
 /** Ranking por hojas de vida llenadas vía link de captación. */
-export async function getReferralLinkLeaderboard(): Promise<
-  ReferralLeaderboardRow[]
-> {
+export async function getReferralLinkLeaderboard(range?: {
+  startIso: string;
+  endExclusiveIso: string;
+}): Promise<ReferralLeaderboardRow[]> {
   const supabase = createAdminClient();
-  const { data, error } = await supabase
+  let q = supabase
     .from("users_documents")
     .select("referral_source")
     .not("referral_source", "is", null);
+  if (range) {
+    q = q
+      .gte("created_at", range.startIso)
+      .lt("created_at", range.endExclusiveIso);
+  }
+
+  const { data, error } = await q;
 
   if (error) throw new Error(error.message);
 

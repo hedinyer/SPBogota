@@ -142,3 +142,90 @@ export function buildReferralLeaderboard(
     })),
   );
 }
+
+/** Ciclo de comisiones: día 20 del mes M → día 5 del mes M+1 (ambos inclusive, Bogotá). */
+export type CommissionPeriod = {
+  /** Mes de inicio YYYY-MM (el que contiene el día 20). */
+  key: string;
+  startIso: string;
+  endExclusiveIso: string;
+  label: string;
+};
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function bogotaYmd(d = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const get = (t: string) =>
+    Number(parts.find((p) => p.type === t)?.value ?? NaN);
+  return { y: get("year"), m: get("month"), d: get("day") };
+}
+
+/** Instantáneo Bogotá → ISO UTC. Fin exclusivo = día 6 00:00. */
+function bogotaDayStartIso(y: number, m: number, d: number) {
+  return new Date(
+    `${y}-${pad2(m)}-${pad2(d)}T00:00:00.000-05:00`,
+  ).toISOString();
+}
+
+function addCalendarMonths(y: number, m: number, delta: number) {
+  const idx = y * 12 + (m - 1) + delta;
+  return { y: Math.floor(idx / 12), m: (idx % 12) + 1 };
+}
+
+const MONTH_LABEL = new Intl.DateTimeFormat("es-CO", {
+  month: "short",
+  timeZone: "UTC",
+});
+
+function monthShort(y: number, m: number) {
+  return MONTH_LABEL.format(new Date(Date.UTC(y, m - 1, 1))).replace(/\.$/, "");
+}
+
+export function commissionPeriodFromKey(key: string): CommissionPeriod | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(key.trim());
+  if (!m) return null;
+  const y = Number(m[1]);
+  const month = Number(m[2]);
+  if (month < 1 || month > 12) return null;
+  const next = addCalendarMonths(y, month, 1);
+  const startIso = bogotaDayStartIso(y, month, 20);
+  const endExclusiveIso = bogotaDayStartIso(next.y, next.m, 6);
+  return {
+    key: `${y}-${pad2(month)}`,
+    startIso,
+    endExclusiveIso,
+    label: `20 ${monthShort(y, month)} – 5 ${monthShort(next.y, next.m)} ${next.y}`,
+  };
+}
+
+/** Periodo de comisión vigente para `now` (si día 6–19 → el cerrado más reciente). */
+export function currentCommissionPeriod(now = new Date()): CommissionPeriod {
+  const { y, m, d } = bogotaYmd(now);
+  let startY = y;
+  let startM = m;
+  if (d < 20) {
+    const prev = addCalendarMonths(y, m, -1);
+    startY = prev.y;
+    startM = prev.m;
+  }
+  return commissionPeriodFromKey(`${startY}-${pad2(startM)}`)!;
+}
+
+export function shiftCommissionPeriod(
+  key: string,
+  deltaMonths: number,
+): CommissionPeriod | null {
+  const cur = commissionPeriodFromKey(key);
+  if (!cur) return null;
+  const [y, m] = cur.key.split("-").map(Number);
+  const next = addCalendarMonths(y, m, deltaMonths);
+  return commissionPeriodFromKey(`${next.y}-${pad2(next.m)}`);
+}
