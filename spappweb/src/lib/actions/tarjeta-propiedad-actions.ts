@@ -81,6 +81,7 @@ export async function createTarjetaPropiedad(
   }
 
   revalidatePath("/tarjetas-propiedad");
+  revalidatePath("/licencias");
   return toRow(data as Record<string, unknown>);
 }
 
@@ -95,4 +96,5 @@ export async function deleteTarjetaPropiedad(id: string): Promise<void> {
 
   if (error) throw new Error(error.message);
   revalidatePath("/tarjetas-propiedad");
+  revalidatePath("/licencias");
 }

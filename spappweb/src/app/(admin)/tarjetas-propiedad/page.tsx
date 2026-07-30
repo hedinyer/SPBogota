@@ -11,7 +11,15 @@ export default async function TarjetasPropiedadPage() {
       <AdminHubSubnav hubId="motos" />
       <PageHeader
         title="Tarjetas de propiedad"
-        description="Archiva frente y reverso de Licencias de Tránsito con su placa."
+        description={
+          <>
+            Archiva frente y reverso de Licencias de Tránsito con su placa.
+            Consulta pública:{" "}
+            <a href="/licencias" className="underline underline-offset-2">
+              /licencias
+            </a>
+          </>
+        }
       />
       <TarjetasPropiedadManager tarjetas={tarjetas} />
     </div>

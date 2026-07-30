@@ -2212,3 +2212,24 @@ export async function getAllTarjetasPropiedad(): Promise<TarjetaPropiedadRow[]> 
   if (error) throw new Error(error.message);
   return (data ?? []) as TarjetaPropiedadRow[];
 }
+
+/** Consulta pública por placa: solo fotos + placa (sin OCR / datos personales). */
+export async function getTarjetaPropiedadByPlaca(
+  placa: string,
+): Promise<Pick<
+  TarjetaPropiedadRow,
+  "id" | "placa" | "imagen_url" | "imagen_reverso_url"
+> | null> {
+  const normalized = placa.trim().toUpperCase().replace(/\s+/g, "");
+  if (normalized.length < 5) return null;
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("tarjetas_propiedad")
+    .select("id, placa, imagen_url, imagen_reverso_url")
+    .eq("placa", normalized)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
