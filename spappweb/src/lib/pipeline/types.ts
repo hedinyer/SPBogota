@@ -310,6 +310,18 @@ export interface GarajeMotoRow {
   origen_user_id?: number | null;
 }
 
+/** Unidad de garaje marcada vendida + datos de la compra/cliente. */
+export interface GarajeMotoVendidaRow {
+  id: string;
+  placa: string | null;
+  referencia: string;
+  modelo: string;
+  color: string;
+  condicion: GarajeCondicion;
+  fechaVenta: string | null;
+  selfieUrl: string | null;
+}
+
 export interface GarajeMantenimientoItemRow {
   id: string;
   garaje_moto_id: string;

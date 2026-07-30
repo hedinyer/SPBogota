@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Bike, Pencil, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Bike, Banknote, Pencil, Plus, Trash2, Warehouse } from "lucide-react";
 import { deleteBike, saveBike } from "@/lib/actions/admin-actions";
 import { MONTO_VISITA_DEFAULT } from "@/lib/payments/visita-monto";
 import type { BikeRow } from "@/lib/pipeline/types";
@@ -45,6 +46,7 @@ import {
   uploadImageFile,
 } from "@/components/ui/image-file-field";
 import { STORAGE_BUCKETS } from "@/lib/supabase/storage-buckets";
+import { bikeStockKey } from "@/lib/garaje/stock-segunda";
 
 function BikePhoto({ bike }: { bike: BikeRow }) {
   return (
@@ -65,11 +67,34 @@ function BikePhoto({ bike }: { bike: BikeRow }) {
   );
 }
 
-export function CatalogoManager({ bikes }: { bikes: BikeRow[] }) {
+export function CatalogoManager({
+  bikes,
+  stockSegunda = {},
+}: {
+  bikes: BikeRow[];
+  /** Unidades segunda_mano en patio, clave modelo|color. */
+  stockSegunda?: Record<string, number>;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<BikeRow | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const catalogKeys = useMemo(
+    () => new Set(bikes.map((b) => bikeStockKey(b.modelo, b.color))),
+    [bikes],
+  );
+  const segundaSinModelo = useMemo(
+    () =>
+      Object.entries(stockSegunda)
+        .filter(([key, n]) => n > 0 && !catalogKeys.has(key))
+        .map(([key, n]) => {
+          const [modelo, color] = key.split("|");
+          return { modelo: modelo ?? key, color: color ?? "", n };
+        })
+        .sort((a, b) => a.modelo.localeCompare(b.modelo)),
+    [stockSegunda, catalogKeys],
+  );
 
   return (
     <>
@@ -93,7 +118,8 @@ export function CatalogoManager({ bikes }: { bikes: BikeRow[] }) {
               <TableHead className="w-[72px]">Foto</TableHead>
               <TableHead>Modelo</TableHead>
               <TableHead>Color</TableHead>
-              <TableHead>Stock</TableHead>
+              <TableHead>Stock nuevo</TableHead>
+              <TableHead>2ª mano</TableHead>
               <TableHead>Precio venta</TableHead>
               <TableHead>Cuota inicial</TableHead>
               <TableHead>Cuota diaria</TableHead>
@@ -112,6 +138,9 @@ export function CatalogoManager({ bikes }: { bikes: BikeRow[] }) {
                 <TableCell>{bike.color}</TableCell>
                 <TableCell>{bike.stock}</TableCell>
                 <TableCell>
+                  {stockSegunda[bikeStockKey(bike.modelo, bike.color)] ?? 0}
+                </TableCell>
+                <TableCell>
                   {bike.precio_venta != null
                     ? formatCop(bike.precio_venta)
                     : "—"}
@@ -129,17 +158,52 @@ export function CatalogoManager({ bikes }: { bikes: BikeRow[] }) {
                     <Button
                       variant="ghost"
                       size="icon"
+                      asChild
+                    >
+                      <Link
+                        href={`/garaje/nueva?${new URLSearchParams({
+                          modelo: bike.modelo,
+                          color: bike.color,
+                        })}`}
+                        aria-label={`Registrar ${bike.modelo} ${bike.color} en garaje`}
+                        title="Registrar en garaje"
+                      >
+                        <Warehouse className="h-4 w-4" aria-hidden="true" />
+                      </Link>
+                    </Button>
+                    {bike.activo && bike.stock > 0 ? (
+                      <Button variant="ghost" size="icon" asChild>
+                        <Link
+                          href={`/venta-contado?${new URLSearchParams({
+                            nuevo: "1",
+                            bikeId: String(bike.id),
+                          })}`}
+                          aria-label={`Vender ${bike.modelo} ${bike.color} al contado`}
+                          title="Vender contado"
+                        >
+                          <Banknote className="h-4 w-4" aria-hidden="true" />
+                        </Link>
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Editar ${bike.modelo} ${bike.color}`}
                       onClick={() => {
                         setEditing(bike);
                         setOpen(true);
                       }}
                     >
-                      <Pencil className="h-4 w-4" />
+                      <Pencil className="h-4 w-4" aria-hidden="true" />
                     </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <Trash2 className="h-4 w-4" />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Eliminar ${bike.modelo} ${bike.color}`}
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent className="bg-background">
@@ -201,8 +265,14 @@ export function CatalogoManager({ bikes }: { bikes: BikeRow[] }) {
             </div>
             <dl className="mt-3 flex flex-col gap-1.5">
               <div className="flex justify-between gap-2">
-                <dt className="text-muted-foreground">Stock</dt>
+                <dt className="text-muted-foreground">Stock nuevo</dt>
                 <dd>{bike.stock}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted-foreground">2ª mano</dt>
+                <dd>
+                  {stockSegunda[bikeStockKey(bike.modelo, bike.color)] ?? 0}
+                </dd>
               </div>
               <div className="flex justify-between gap-2">
                 <dt className="text-muted-foreground">Precio venta</dt>
@@ -225,23 +295,47 @@ export function CatalogoManager({ bikes }: { bikes: BikeRow[] }) {
                 <dd>{formatCop(bike.monto_visita ?? MONTO_VISITA_DEFAULT)}</dd>
               </div>
             </dl>
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" className="min-h-11 flex-1" asChild>
+                <Link
+                  href={`/garaje/nueva?${new URLSearchParams({
+                    modelo: bike.modelo,
+                    color: bike.color,
+                  })}`}
+                >
+                  <Warehouse className="mr-1 h-4 w-4" aria-hidden="true" />
+                  En garaje
+                </Link>
+              </Button>
+              {bike.activo && bike.stock > 0 ? (
+                <Button variant="outline" size="sm" className="min-h-11 flex-1" asChild>
+                  <Link
+                    href={`/venta-contado?${new URLSearchParams({
+                      nuevo: "1",
+                      bikeId: String(bike.id),
+                    })}`}
+                  >
+                    <Banknote className="mr-1 h-4 w-4" aria-hidden="true" />
+                    Contado
+                  </Link>
+                </Button>
+              ) : null}
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1"
+                className="min-h-11 flex-1"
                 onClick={() => {
                   setEditing(bike);
                   setOpen(true);
                 }}
               >
-                <Pencil className="mr-1 h-4 w-4" />
+                <Pencil className="mr-1 h-4 w-4" aria-hidden="true" />
                 Editar
               </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="flex-1">
-                    <Trash2 className="mr-1 h-4 w-4" />
+                  <Button variant="outline" size="sm" className="min-h-11 flex-1">
+                    <Trash2 className="mr-1 h-4 w-4" aria-hidden="true" />
                     Eliminar
                   </Button>
                 </AlertDialogTrigger>
@@ -281,6 +375,40 @@ export function CatalogoManager({ bikes }: { bikes: BikeRow[] }) {
         ))}
       </div>
 
+      {segundaSinModelo.length > 0 ? (
+        <section
+          className="rounded-lg border border-dashed border-border p-4"
+          aria-labelledby="segunda-sin-modelo-title"
+        >
+          <h2
+            id="segunda-sin-modelo-title"
+            className="text-sm font-semibold text-foreground"
+          >
+            Segunda mano sin modelo en catálogo
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Unidades en patio cuyo modelo/color no coincide con una fila de
+            arriba. Créalas en catálogo o corrige el texto en garaje.
+          </p>
+          <ul className="mt-3 flex flex-col gap-2">
+            {segundaSinModelo.map((row) => (
+              <li
+                key={`${row.modelo}|${row.color}`}
+                className="flex min-h-11 flex-wrap items-center justify-between gap-2 text-sm"
+              >
+                <span>
+                  {row.modelo}
+                  {row.color ? ` · ${row.color}` : ""}
+                </span>
+                <Badge variant="secondary" className="font-normal">
+                  {row.n} en patio
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <BikeDialog
         open={open}
         onOpenChange={setOpen}
@@ -300,7 +428,22 @@ export function CatalogoManager({ bikes }: { bikes: BikeRow[] }) {
               }
 
               await saveBike({ ...form, imagenUrl });
-              toast.success(editing ? "Moto actualizada." : "Moto creada.");
+              if (editing) {
+                toast.success("Moto actualizada.");
+              } else {
+                const garajeQs = new URLSearchParams({
+                  modelo: form.modelo,
+                  color: form.color,
+                });
+                toast.success("Moto creada.", {
+                  duration: 8000,
+                  action: {
+                    label: "Registrar en garaje",
+                    onClick: () =>
+                      router.push(`/garaje/nueva?${garajeQs}`),
+                  },
+                });
+              }
               router.refresh();
               setOpen(false);
             } catch (e) {

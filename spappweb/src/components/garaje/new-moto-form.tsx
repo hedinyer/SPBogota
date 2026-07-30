@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { saveGarajeMoto } from "@/lib/actions/admin-actions";
 import type {
+  BikeRow,
   GarajeCondicion,
   GarajeMotoEstado,
   GarajeParqueaderoRow,
@@ -53,8 +54,14 @@ const defaultDraft = (): Omit<GarajeNuevaMotoDraft, "imageDataUrl" | "imageName"
 
 export function NewMotoForm({
   parqueaderos,
+  catalogoBikes = [],
+  initialModelo = "",
+  initialColor = "",
 }: {
   parqueaderos: GarajeParqueaderoRow[];
+  catalogoBikes?: Pick<BikeRow, "id" | "modelo" | "color">[];
+  initialModelo?: string;
+  initialColor?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -64,13 +71,31 @@ export function NewMotoForm({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [referencia, setReferencia] = useState("");
-  const [modelo, setModelo] = useState("");
-  const [color, setColor] = useState("");
+  const [modelo, setModelo] = useState(initialModelo);
+  const [color, setColor] = useState(initialColor);
   const [condicion, setCondicion] = useState<GarajeCondicion>("nueva");
   const [estado, setEstado] = useState<GarajeMotoEstado>("en_garaje");
   const [notas, setNotas] = useState("");
   const imageDataUrlRef = useRef<string | undefined>(undefined);
   const imageNameRef = useRef<string | undefined>(undefined);
+  const urlPrefill =
+    initialModelo.trim().length > 0 || initialColor.trim().length > 0;
+
+  const catalogOptions = useMemo(
+    () =>
+      catalogoBikes.map((b) => ({
+        value: String(b.id),
+        label: `${b.modelo} · ${b.color}`,
+      })),
+    [catalogoBikes],
+  );
+
+  const catalogValue = useMemo(() => {
+    const match = catalogoBikes.find(
+      (b) => b.modelo === modelo && b.color === color,
+    );
+    return match ? String(match.id) : "";
+  }, [catalogoBikes, modelo, color]);
 
   const persistDraft = useCallback(
     (overrides?: Partial<GarajeNuevaMotoDraft>) => {
@@ -103,13 +128,26 @@ export function NewMotoForm({
 
   const restoreDraft = useCallback(async () => {
     const draft = readGarajeNuevaMotoDraft();
-    if (!draft) return;
+    if (!draft) {
+      if (urlPrefill) {
+        setModelo(initialModelo);
+        setColor(initialColor);
+        if (initialModelo) setReferencia(initialModelo);
+      }
+      return;
+    }
 
     setParqueaderoId(draft.parqueaderoId ?? "none");
     setPlaca(draft.placa ?? "");
-    setReferencia(draft.referencia ?? "");
-    setModelo(draft.modelo ?? "");
-    setColor(draft.color ?? "");
+    const draftRef = draft.referencia ?? "";
+    // ponytail: URL deep-link wins over draft for modelo/color
+    setModelo(urlPrefill ? initialModelo : (draft.modelo ?? ""));
+    setColor(urlPrefill ? initialColor : (draft.color ?? ""));
+    setReferencia(
+      urlPrefill && initialModelo && !draftRef.trim()
+        ? initialModelo
+        : draftRef,
+    );
     setCondicion(draft.condicion ?? "nueva");
     setEstado(draft.estado ?? "en_garaje");
     setNotas(draft.notas ?? "");
@@ -124,11 +162,12 @@ export function NewMotoForm({
       );
       if (restored) setImageFile(restored);
     }
-  }, []);
+  }, [initialColor, initialModelo, urlPrefill]);
 
   useEffect(() => {
     void restoreDraft().finally(() => setHydrated(true));
-  }, [restoreDraft]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate once
+  }, []);
 
   useEffect(() => {
     function handlePageShow(event: PageTransitionEvent) {
@@ -177,6 +216,15 @@ export function NewMotoForm({
     persistDraft({ imageDataUrl: undefined, imageName: undefined });
   }
 
+  function applyCatalog(bikeId: string) {
+    if (!bikeId) return;
+    const bike = catalogoBikes.find((b) => String(b.id) === bikeId);
+    if (!bike) return;
+    setModelo(bike.modelo);
+    setColor(bike.color);
+    if (!referencia.trim()) setReferencia(bike.modelo);
+  }
+
   const requiresPhoto = condicion !== "nueva";
   const canSave =
     !pending &&
@@ -188,6 +236,9 @@ export function NewMotoForm({
   function handleSubmit() {
     if (!canSave) return;
     if (requiresPhoto && !imageFile) return;
+
+    const modeloSaved = modelo.trim();
+    const colorSaved = color.trim();
 
     startTransition(async () => {
       try {
@@ -206,8 +257,8 @@ export function NewMotoForm({
           placa,
           placaFotoUrl,
           referencia,
-          modelo,
-          color,
+          modelo: modeloSaved,
+          color: colorSaved,
           origen: "manual",
           condicion,
           estado,
@@ -221,7 +272,18 @@ export function NewMotoForm({
         }
 
         clearGarajeNuevaMotoDraft();
-        toast.success("Moto registrada.");
+        const contadoQs = new URLSearchParams({
+          nuevo: "1",
+          modelo: modeloSaved,
+          color: colorSaved,
+        });
+        toast.success("Moto registrada.", {
+          duration: 8000,
+          action: {
+            label: "Vender contado",
+            onClick: () => router.push(`/venta-contado?${contadoQs}`),
+          },
+        });
         router.push("/garaje");
         router.refresh();
       } catch (e) {
@@ -239,6 +301,29 @@ export function NewMotoForm({
       }}
     >
       <div className="grid gap-4 sm:grid-cols-2">
+        {catalogOptions.length > 0 ? (
+          <div className="flex flex-col gap-2 sm:col-span-2">
+            <Label htmlFor="garaje-catalogo-modelo">Modelo del catálogo</Label>
+            <TouchSelect
+              id="garaje-catalogo-modelo"
+              aria-label="Modelo del catálogo"
+              value={catalogValue}
+              onChange={applyCatalog}
+              placeholder="Elegir del catálogo…"
+              options={catalogOptions}
+            />
+            <p className="text-xs text-muted-foreground">
+              Rellena modelo y color. Si el modelo no existe, créalo antes en{" "}
+              <Link
+                href="/catalogo"
+                className="font-medium text-foreground underline underline-offset-4"
+              >
+                Modelos
+              </Link>
+              .
+            </p>
+          </div>
+        ) : null}
         <div className="sm:col-span-2">
           <ImageFileField
             label={
@@ -344,10 +429,12 @@ function Field({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const id = `field-${label.toLowerCase().replace(/\s+/g, "-")}`;
   return (
     <div className="flex flex-col gap-2">
-      <Label>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       <Input
+        id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="min-h-11 touch-manipulation text-base md:text-sm"

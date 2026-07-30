@@ -24,6 +24,8 @@ interface VenderMotoSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
+  /** Prefill from deep link (?bikeId= / match modelo+color). */
+  initialBikeId?: string;
 }
 
 export function VenderMotoSheet({
@@ -31,6 +33,7 @@ export function VenderMotoSheet({
   open,
   onOpenChange,
   onSaved,
+  initialBikeId,
 }: VenderMotoSheetProps) {
   const [pending, startTransition] = useTransition();
   const [bikeId, setBikeId] = useState("");
@@ -38,6 +41,14 @@ export function VenderMotoSheet({
   const [montoPagado, setMontoPagado] = useState("");
   const activeBikes = bikes.filter((b) => b.activo && b.stock > 0);
   const selected = activeBikes.find((b) => String(b.id) === bikeId);
+
+  useEffect(() => {
+    if (!open || !initialBikeId) return;
+    const ok = bikes.some(
+      (b) => b.activo && b.stock > 0 && String(b.id) === initialBikeId,
+    );
+    if (ok) setBikeId(initialBikeId);
+  }, [open, initialBikeId, bikes]);
 
   const valorNum = Number(valorVenta.replace(/\D/g, ""));
   const pagadoNum = Number(montoPagado.replace(/\D/g, ""));

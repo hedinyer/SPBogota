@@ -17,6 +17,7 @@ import type {
   CompraProductoCreditoRow,
   ProductoCreditoRow,
   GarajeMotoRow,
+  GarajeMotoVendidaRow,
   GarajeMantenimientoItemRow,
   GarajeParqueaderoRow,
   VendidaMotoRow,
@@ -1560,6 +1561,90 @@ export async function getAllGarajeMotos(): Promise<GarajeMotoRow[]> {
       fecha_recogida: recoger?.fecha_recogida ?? null,
       origen_user_id: compra?.user_id ?? recoger?.user_id ?? null,
     };
+  });
+}
+
+export async function getGarajeMotosVendidas(): Promise<GarajeMotoVendidaRow[]> {
+  const supabase = createAdminClient();
+  const { data: motos, error } = await supabase
+    .from("garaje_motos")
+    .select("id, placa, referencia, modelo, color, condicion, updated_at")
+    .eq("estado", "vendida")
+    .order("updated_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  if (!motos?.length) return [];
+
+  const ids = motos.map((m) => m.id as string);
+  const placas = [
+    ...new Set(
+      motos
+        .map((m) => (m.placa as string | null)?.trim().toUpperCase())
+        .filter((p): p is string => Boolean(p)),
+    ),
+  ];
+
+  const { data: compras, error: comprasError } = await supabase
+    .from("user_moto_compra")
+    .select(
+      "garaje_moto_id, placa, fecha_entrega, seleccionado_at, updated_at, users(users_documents(selfie_url))",
+    )
+    .or(
+      `garaje_moto_id.in.(${ids.join(",")})${placas.length ? `,placa.in.(${placas.join(",")})` : ""}`,
+    );
+
+  if (comprasError) throw new Error(comprasError.message);
+
+  type CompraJoin = {
+    garaje_moto_id: string | null;
+    placa: string | null;
+    fecha_entrega: string | null;
+    seleccionado_at: string | null;
+    updated_at: string | null;
+    users:
+      | { users_documents: { selfie_url: string | null } | { selfie_url: string | null }[] | null }
+      | { users_documents: { selfie_url: string | null } | { selfie_url: string | null }[] | null }[]
+      | null;
+  };
+
+  const byGaraje = new Map<string, CompraJoin>();
+  const byPlaca = new Map<string, CompraJoin>();
+  for (const row of (compras ?? []) as unknown as CompraJoin[]) {
+    if (row.garaje_moto_id && !byGaraje.has(row.garaje_moto_id)) {
+      byGaraje.set(row.garaje_moto_id, row);
+    }
+    const p = row.placa?.trim().toUpperCase();
+    if (p && !byPlaca.has(p)) byPlaca.set(p, row);
+  }
+
+  function selfieOf(compra: CompraJoin | undefined): string | null {
+    if (!compra) return null;
+    const users = Array.isArray(compra.users) ? compra.users[0] : compra.users;
+    const docs = users?.users_documents;
+    const doc = Array.isArray(docs) ? docs[0] : docs;
+    return doc?.selfie_url ? String(doc.selfie_url) : null;
+  }
+
+  return motos.map((m) => {
+    const placaKey = (m.placa as string | null)?.trim().toUpperCase() ?? "";
+    const compra =
+      byGaraje.get(m.id as string) ?? (placaKey ? byPlaca.get(placaKey) : undefined);
+    return {
+      id: m.id as string,
+      placa: (m.placa as string | null) ?? null,
+      referencia: String(m.referencia ?? ""),
+      modelo: String(m.modelo ?? ""),
+      color: String(m.color ?? ""),
+      condicion: m.condicion as GarajeMotoVendidaRow["condicion"],
+      // ponytail: fecha_entrega often null on legacy rows → fall back
+      fechaVenta:
+        compra?.fecha_entrega ??
+        compra?.seleccionado_at ??
+        compra?.updated_at ??
+        (m.updated_at as string | null) ??
+        null,
+      selfieUrl: selfieOf(compra),
+    } satisfies GarajeMotoVendidaRow;
   });
 }
 

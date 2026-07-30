@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bike, CircleDollarSign, Pencil, Plus, Printer, Tag, User } from "lucide-react";
 import type { VentaMotoRow } from "@/lib/actions/venta-moto-actions";
@@ -84,16 +84,28 @@ function EstadoBadge({ venta }: { venta: VentaMotoRow }) {
 export function VentaContadoManager({
   ventas,
   bikes,
+  openNuevo = false,
+  initialBikeId,
 }: {
   ventas: VentaMotoRow[];
   bikes: BikeRow[];
+  openNuevo?: boolean;
+  initialBikeId?: string;
 }) {
   const router = useRouter();
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(openNuevo);
+  const [prefillsBikeId, setPrefillsBikeId] = useState(initialBikeId);
   const [busqueda, setBusqueda] = useState("");
   const [abonoVenta, setAbonoVenta] = useState<VentaMotoRow | null>(null);
   const [placaVenta, setPlacaVenta] = useState<VentaMotoRow | null>(null);
   const [editVenta, setEditVenta] = useState<VentaMotoRow | null>(null);
+
+  useEffect(() => {
+    if (!openNuevo) return;
+    setSheetOpen(true);
+    setPrefillsBikeId(initialBikeId);
+    router.replace("/venta-contado", { scroll: false });
+  }, [openNuevo, initialBikeId, router]);
 
   const ventasFiltradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -389,8 +401,12 @@ export function VentaContadoManager({
       <VenderMotoSheet
         bikes={bikes}
         open={sheetOpen}
-        onOpenChange={setSheetOpen}
+        onOpenChange={(open) => {
+          setSheetOpen(open);
+          if (!open) setPrefillsBikeId(undefined);
+        }}
         onSaved={() => router.refresh()}
+        initialBikeId={prefillsBikeId}
       />
 
       <AbonoVentaDialog

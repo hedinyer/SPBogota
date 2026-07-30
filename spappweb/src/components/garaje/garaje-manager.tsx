@@ -189,48 +189,76 @@ export function GarajeManager({
                 Motos nuevas (catálogo)
               </h2>
               <p className="text-xs text-muted-foreground">
-                Stock disponible para entregar a crédito. Las recuperadas
-                aparecen abajo al marcarlas como recogidas.
+                Stock del catálogo. Registra la unidad física o vende al
+                contado desde aquí.
               </p>
             </div>
             <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {stockNuevo.map((bike) => (
-                <li
-                  key={bike.id}
-                  className="flex gap-3 overflow-hidden rounded-xl border border-border bg-background p-3"
-                >
-                  <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-lg border border-border bg-muted/50">
-                    {bike.imagen_url ? (
-                      <Image
-                        src={bike.imagen_url}
-                        alt={`${bike.modelo} ${bike.color}`}
-                        fill
-                        className="object-cover"
-                        unoptimized
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-                        Sin foto
+              {stockNuevo.map((bike) => {
+                const garajeQs = new URLSearchParams({
+                  modelo: bike.modelo,
+                  color: bike.color,
+                });
+                const contadoQs = new URLSearchParams({
+                  nuevo: "1",
+                  bikeId: String(bike.id),
+                });
+                return (
+                  <li
+                    key={bike.id}
+                    className="flex flex-col gap-3 overflow-hidden rounded-xl border border-border bg-background p-3"
+                  >
+                    <div className="flex gap-3">
+                      <div className="relative h-20 w-28 shrink-0 overflow-hidden rounded-lg border border-border bg-muted/50">
+                        {bike.imagen_url ? (
+                          <Image
+                            src={bike.imagen_url}
+                            alt={`${bike.modelo} ${bike.color}`}
+                            fill
+                            className="object-cover"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                            Sin foto
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">{bike.modelo}</p>
-                    <p className="text-sm text-muted-foreground">{bike.color}</p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <Badge
-                        variant="outline"
-                        className="border-emerald-200 bg-emerald-50 font-normal text-emerald-800"
-                      >
-                        Nueva
-                      </Badge>
-                      <Badge variant="secondary" className="font-normal">
-                        Stock {bike.stock}
-                      </Badge>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">{bike.modelo}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {bike.color}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          <Badge
+                            variant="outline"
+                            className="border-emerald-200 bg-emerald-50 font-normal text-emerald-800"
+                          >
+                            Nueva
+                          </Badge>
+                          <Badge variant="secondary" className="font-normal">
+                            Stock {bike.stock}
+                          </Badge>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        href={`/garaje/nueva?${garajeQs}`}
+                        className="inline-flex min-h-11 flex-1 touch-manipulation items-center justify-center rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted/50"
+                      >
+                        Registrar unidad
+                      </Link>
+                      <Link
+                        href={`/venta-contado?${contadoQs}`}
+                        className="inline-flex min-h-11 flex-1 touch-manipulation items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
+                      >
+                        Vender contado
+                      </Link>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ) : null}

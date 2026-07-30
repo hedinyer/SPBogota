@@ -368,11 +368,19 @@ export async function markDelivered(compraId: string, userId: number) {
 
   if (error) throw new Error(error.message);
 
+  // ponytail: deliveries often lack garaje_moto_id; placa match covers those
   if (compra.garaje_moto_id) {
     await supabase
       .from("garaje_motos")
       .update({ estado: "vendida" })
       .eq("id", compra.garaje_moto_id);
+    revalidatePath("/garaje");
+  } else if (compra.placa) {
+    await supabase
+      .from("garaje_motos")
+      .update({ estado: "vendida" })
+      .eq("placa", compra.placa)
+      .neq("estado", "vendida");
     revalidatePath("/garaje");
   }
 

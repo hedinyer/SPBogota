@@ -1,4 +1,5 @@
 import {
+  BadgeCheck,
   Banknote,
   Bike,
   ClipboardList,
@@ -52,10 +53,12 @@ export const adminNavGroups: AdminNavGroup[] = [
     href: "/garaje",
     icon: Warehouse,
     children: [
-      { href: "/garaje", label: "Garaje", icon: Warehouse },
-      { href: "/vendidas", label: "En calle", icon: ShoppingBag },
+      // ponytail: order = register → stock → sell → sold → street; Tarjetas out of that path
       { href: "/catalogo", label: "Modelos", icon: Bike },
+      { href: "/garaje", label: "Garaje", icon: Warehouse },
       { href: "/venta-contado", label: "Contado", icon: Banknote },
+      { href: "/motos-vendidas", label: "Vendidas", icon: BadgeCheck },
+      { href: "/vendidas", label: "En calle", icon: ShoppingBag },
       { href: "/tarjetas-propiedad", label: "Tarjetas", icon: IdCard },
     ],
   },

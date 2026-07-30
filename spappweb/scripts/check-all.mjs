@@ -10,6 +10,7 @@ const checks = [
   "src/lib/pipeline/pipeline.check.ts",
   "src/lib/pipeline/mora-utils.check.ts",
   "src/lib/admin/titularidad.check.ts",
+  "src/lib/garaje/stock-segunda.check.ts",
 ];
 
 function run(file) {
