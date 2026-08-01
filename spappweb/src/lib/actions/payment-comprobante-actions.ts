@@ -107,6 +107,7 @@ async function assertReferenciaUnicaPorCliente(
   supabase: Awaited<ReturnType<typeof assertAdmin>>,
   userId: number,
   referencia: string,
+  excludePagoId?: string,
 ) {
   const normalizada = normalizeReferencia(referencia);
   if (!normalizada) {
@@ -121,12 +122,11 @@ async function assertReferenciaUnicaPorCliente(
 
   if (error) throw new Error(error.message);
 
-  if (
-    isReferenciaDuplicada(
-      normalizada,
-      (data ?? []).map((row) => String(row.referencia)),
-    )
-  ) {
+  const usadas = (data ?? [])
+    .filter((row) => row.id !== excludePagoId)
+    .map((row) => String(row.referencia));
+
+  if (isReferenciaDuplicada(normalizada, usadas)) {
     throw new Error("Esta referencia ya fue usada en otro pago de este cliente.");
   }
 }
@@ -448,6 +448,207 @@ export async function removePagoAbono(
   if (deleteError) throw new Error(deleteError.message);
 
   revalidateClient(userId);
+  return { ok: true };
+}
+
+export async function updatePagoAbono(input: {
+  pagoId: string;
+  userId: number;
+  monto: number;
+  referencia: string;
+  medioPagoAdmin: MedioPagoAdmin;
+  contexto: PrimerPagoConcepto;
+}): Promise<{ ok: true }> {
+  const parsed = z
+    .object({
+      pagoId: z.string().uuid(),
+      userId: z.number().int().positive(),
+      monto: z.number().int().positive("El monto debe ser mayor a 0"),
+      referencia: z.string().min(1, "Ingresa la referencia."),
+      medioPagoAdmin: z.enum(MEDIO_PAGO_ADMIN_VALUES),
+      contexto: z.enum(["inicial", "cuota_adelantada", "visita"]),
+    })
+    .parse(input);
+
+  const supabase = await assertAdmin();
+
+  const { data: pago, error: pagoError } = await supabase
+    .from("pagos")
+    .select("id, contexto_pago, user_moto_compra_id, user_id, referencia")
+    .eq("id", parsed.pagoId)
+    .maybeSingle();
+
+  if (pagoError) throw new Error(pagoError.message);
+  if (!pago) throw new Error("Abono no encontrado.");
+  if (pago.user_id !== parsed.userId) {
+    throw new Error("El abono no pertenece a este cliente.");
+  }
+
+  if (
+    pago.contexto_pago !== "inicial" &&
+    pago.contexto_pago !== "cuota_adelantada" &&
+    pago.contexto_pago !== "visita"
+  ) {
+    throw new Error("Solo se pueden editar abonos del primer pago.");
+  }
+
+  const { data: compra, error: compraError } = await supabase
+    .from("user_moto_compra")
+    .select("estado")
+    .eq("id", pago.user_moto_compra_id)
+    .maybeSingle();
+
+  if (compraError) throw new Error(compraError.message);
+  if (!compra) throw new Error("Compra no encontrada.");
+
+  if (compra.estado !== "pendiente_pago" && compra.estado !== "lista_retiro") {
+    throw new Error("No se pueden editar abonos en este estado.");
+  }
+
+  const referencia = isPresencialMedio(parsed.medioPagoAdmin)
+    ? resolveReferenciaPresencial(parsed.medioPagoAdmin, parsed.referencia)
+    : normalizeReferencia(parsed.referencia);
+
+  if (!referencia) {
+    throw new Error("Ingresa la referencia.");
+  }
+
+  await assertReferenciaUnicaPorCliente(
+    supabase,
+    parsed.userId,
+    referencia,
+    parsed.pagoId,
+  );
+
+  const { error: updateError } = await supabase
+    .from("pagos")
+    .update({
+      monto: parsed.monto,
+      referencia,
+      medio_pago_admin: parsed.medioPagoAdmin,
+      medio_pago_usuario: medioPagoUsuarioFromAdmin(parsed.medioPagoAdmin),
+      contexto_pago: parsed.contexto,
+    })
+    .eq("id", parsed.pagoId);
+
+  if (updateError) {
+    if (updateError.code === "23505") {
+      throw new Error("Esta referencia ya fue usada en otro pago de este cliente.");
+    }
+    throw new Error(updateError.message);
+  }
+
+  revalidateClient(parsed.userId);
+  return { ok: true };
+}
+
+export async function updateMontosPrimerPagoCompra(input: {
+  userId: number;
+  compraId: string;
+  cuotaInicial: number;
+  montoCuotaPeriodo: number;
+}): Promise<{ ok: true }> {
+  const parsed = z
+    .object({
+      userId: z.number().int().positive(),
+      compraId: z.string().uuid(),
+      cuotaInicial: z.number().int().min(0),
+      montoCuotaPeriodo: z.number().int().min(0),
+    })
+    .parse(input);
+
+  const supabase = await assertAdmin();
+
+  const { data: compra, error: compraError } = await supabase
+    .from("user_moto_compra")
+    .select(
+      "id, digital_contract_id, estado, cuota_inicial_monto, monto_cuota_periodo, monto_visita_monto",
+    )
+    .eq("id", parsed.compraId)
+    .eq("user_id", parsed.userId)
+    .maybeSingle();
+
+  if (compraError) throw new Error(compraError.message);
+  if (!compra) throw new Error("Compra no encontrada.");
+  if (compra.estado !== "pendiente_pago" && compra.estado !== "lista_retiro") {
+    throw new Error("No se pueden cambiar las cuotas en este estado.");
+  }
+
+  const { data: pagos, error: pagosError } = await supabase
+    .from("pagos")
+    .select("monto, contexto_pago, estado")
+    .eq("user_moto_compra_id", parsed.compraId)
+    .in("contexto_pago", ["inicial", "cuota_adelantada"])
+    .eq("estado", "confirmado");
+
+  if (pagosError) throw new Error(pagosError.message);
+
+  let recibidoInicial = 0;
+  let recibidoCuota = 0;
+  for (const p of pagos ?? []) {
+    if (p.contexto_pago === "inicial") recibidoInicial += Number(p.monto);
+    if (p.contexto_pago === "cuota_adelantada") recibidoCuota += Number(p.monto);
+  }
+
+  if (parsed.cuotaInicial < recibidoInicial) {
+    throw new Error(
+      `Ya se recibieron ${recibidoInicial.toLocaleString("es-CO")} de cuota inicial; el monto no puede ser menor.`,
+    );
+  }
+  if (parsed.montoCuotaPeriodo < recibidoCuota) {
+    throw new Error(
+      `Ya se recibieron ${recibidoCuota.toLocaleString("es-CO")} de cuota adelantada; el monto no puede ser menor.`,
+    );
+  }
+
+  const montoTotal =
+    parsed.cuotaInicial +
+    parsed.montoCuotaPeriodo +
+    Number(compra.monto_visita_monto);
+
+  const { error: updateError } = await supabase
+    .from("user_moto_compra")
+    .update({
+      cuota_inicial_monto: parsed.cuotaInicial,
+      monto_cuota_periodo: parsed.montoCuotaPeriodo,
+      monto_total_primer_pago: montoTotal,
+    })
+    .eq("id", parsed.compraId);
+
+  if (updateError) throw new Error(updateError.message);
+
+  // Flags de confirmación dependen de montos esperados; el trigger solo corre en pagos
+  const { error: syncError } = await supabase.rpc("sync_compra_pago_flags", {
+    p_compra_id: parsed.compraId,
+  });
+  if (syncError) throw new Error(syncError.message);
+
+  const contractId = compra.digital_contract_id as string | null;
+  if (contractId) {
+    const { data: contract, error: contractError } = await supabase
+      .from("digital_contracts")
+      .select("admin_data")
+      .eq("id", contractId)
+      .maybeSingle();
+
+    if (contractError) throw new Error(contractError.message);
+
+    const adminData = {
+      ...((contract?.admin_data as Record<string, unknown>) ?? {}),
+      cuota_inicial: parsed.cuotaInicial,
+      valor_cuota: parsed.montoCuotaPeriodo,
+      monto_total_primer_pago: montoTotal,
+    };
+
+    const { error: contractUpdateError } = await supabase
+      .from("digital_contracts")
+      .update({ admin_data: adminData })
+      .eq("id", contractId);
+
+    if (contractUpdateError) throw new Error(contractUpdateError.message);
+  }
+
+  revalidateClient(parsed.userId);
   return { ok: true };
 }
 

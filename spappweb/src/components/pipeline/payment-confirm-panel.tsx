@@ -2,11 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { ExternalLink, Printer, Trash2 } from "lucide-react";
+import { ExternalLink, Pencil, Printer, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   removePagoAbono,
   updateMontoVisitaCompra,
+  updatePagoAbono,
 } from "@/lib/actions/payment-comprobante-actions";
 import {
   printCreditoPagoReceipt,
@@ -33,12 +34,21 @@ import type {
 import {
   CONTEXTO_PAGO_LABELS,
   MEDIO_PAGO_ADMIN_LABELS,
+  MEDIO_PAGO_ADMIN_OPTIONS,
 } from "@/lib/pipeline/types";
 import { formatCop, formatDate } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TouchSelect } from "@/components/ui/touch-select";
 import { PaymentComprobanteDialog } from "@/components/pipeline/payment-comprobante-dialog";
 import { FrecuenciaPagoEditor } from "@/components/pipeline/frecuencia-pago-editor";
 
@@ -296,7 +306,9 @@ function ConceptoAbonoSection({
   onAddAbono: () => void;
   onAddEfectivo: () => void;
 }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [editing, setEditing] = useState<PagoRow | null>(null);
   const esperado = montoEsperadoConcepto(compra, contexto);
   const recibido = sumAbonos(pagos, contexto);
   const faltante = faltanteConcepto(compra, pagos, contexto);
@@ -334,6 +346,7 @@ function ConceptoAbonoSection({
       try {
         await removePagoAbono(pagoId, userId);
         toast.success("Abono eliminado.");
+        router.refresh();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Error al eliminar.");
       }
@@ -409,16 +422,28 @@ function ConceptoAbonoSection({
                   </a>
                 )}
                 {canEdit && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    disabled={pending}
-                    onClick={() => handleRemove(abono.id)}
-                    title="Eliminar abono"
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={pending}
+                      onClick={() => setEditing(abono)}
+                      title="Editar abono"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={pending}
+                      onClick={() => handleRemove(abono.id)}
+                      title="Eliminar abono"
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </>
                 )}
               </div>
             </li>
@@ -446,6 +471,159 @@ function ConceptoAbonoSection({
           </Button>
         </div>
       )}
+
+      <EditAbonoDialog
+        abono={editing}
+        userId={userId}
+        defaultContexto={contexto}
+        open={editing != null}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null);
+        }}
+        onSaved={() => {
+          setEditing(null);
+          router.refresh();
+        }}
+      />
     </div>
+  );
+}
+
+function EditAbonoDialog({
+  abono,
+  userId,
+  defaultContexto,
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  abono: PagoRow | null;
+  userId: number;
+  defaultContexto: PrimerPagoConcepto;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+}) {
+  const [monto, setMonto] = useState("");
+  const [referencia, setReferencia] = useState("");
+  const [medio, setMedio] = useState<MedioPagoAdmin>("nequi_nicolas");
+  const [contexto, setContexto] =
+    useState<PrimerPagoConcepto>(defaultContexto);
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!abono || !open) return;
+    setMonto(String(abono.monto));
+    setReferencia(abono.referencia ?? "");
+    const stored = abono.medio_pago_admin;
+    setMedio(
+      stored &&
+        (MEDIO_PAGO_ADMIN_OPTIONS as readonly string[]).includes(stored)
+        ? (stored as MedioPagoAdmin)
+        : "nequi_nicolas",
+    );
+    setContexto(
+      abono.contexto_pago === "inicial" ||
+        abono.contexto_pago === "cuota_adelantada" ||
+        abono.contexto_pago === "visita"
+        ? abono.contexto_pago
+        : defaultContexto,
+    );
+  }, [abono, open, defaultContexto]);
+
+  function handleSave() {
+    if (!abono) return;
+    const parsed = Number(monto.replace(/\D/g, ""));
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      toast.error("Indica un monto válido.");
+      return;
+    }
+    if (!referencia.trim()) {
+      toast.error("Ingresa la referencia.");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        await updatePagoAbono({
+          pagoId: abono.id,
+          userId,
+          monto: parsed,
+          referencia: referencia.trim(),
+          medioPagoAdmin: medio,
+          contexto,
+        });
+        toast.success("Abono actualizado.");
+        onSaved();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "No se pudo guardar.");
+      }
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Editar abono</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="edit-abono-monto">Monto</Label>
+            <Input
+              id="edit-abono-monto"
+              inputMode="numeric"
+              value={monto}
+              onChange={(e) => setMonto(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="edit-abono-ref">Referencia</Label>
+            <Input
+              id="edit-abono-ref"
+              value={referencia}
+              onChange={(e) => setReferencia(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Medio</Label>
+            <TouchSelect
+              value={medio}
+              onChange={(v) => setMedio(v as MedioPagoAdmin)}
+              options={MEDIO_PAGO_ADMIN_OPTIONS.map((m) => ({
+                value: m,
+                label: MEDIO_PAGO_ADMIN_LABELS[m],
+              }))}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Concepto</Label>
+            <TouchSelect
+              value={contexto}
+              onChange={(v) => setContexto(v as PrimerPagoConcepto)}
+              options={(
+                ["inicial", "cuota_adelantada", "visita"] as const
+              ).map((c) => ({
+                value: c,
+                label: CONTEXTO_PAGO_LABELS[c],
+              }))}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={pending}
+          >
+            Cancelar
+          </Button>
+          <Button type="button" disabled={pending} onClick={handleSave}>
+            {pending ? "Guardando…" : "Guardar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

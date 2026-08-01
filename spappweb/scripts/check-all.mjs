@@ -11,6 +11,7 @@ const checks = [
   "src/lib/pipeline/mora-utils.check.ts",
   "src/lib/admin/titularidad.check.ts",
   "src/lib/garaje/stock-segunda.check.ts",
+  "src/lib/payments/primer-pago-progress.check.ts",
 ];
 
 function run(file) {

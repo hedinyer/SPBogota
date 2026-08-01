@@ -1,9 +1,11 @@
 "use client";
 
-import { useTransition, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { Copy, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import { updateDelivery } from "@/lib/actions/admin-actions";
+import { updateMontosPrimerPagoCompra } from "@/lib/actions/payment-comprobante-actions";
 import type {
   ContractStatus,
   DigitalContractRow,
@@ -29,6 +31,12 @@ function contractSigned(contract: DigitalContractRow | null): boolean {
   return (contract?.status as ContractStatus | undefined) === "firmado";
 }
 
+function parseMonto(value: string): number | null {
+  const n = Number(value.replace(/\D/g, ""));
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
 export function MotoSelectionPanel({
   contract,
   compra,
@@ -36,7 +44,22 @@ export function MotoSelectionPanel({
   clienteCelular,
   userId,
 }: MotoSelectionPanelProps) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const canEditMontos =
+    compra?.estado === "pendiente_pago" || compra?.estado === "lista_retiro";
+  const [cuotaInicial, setCuotaInicial] = useState(
+    String(compra?.cuota_inicial_monto ?? ""),
+  );
+  const [cuotaAdelantada, setCuotaAdelantada] = useState(
+    String(compra?.monto_cuota_periodo ?? ""),
+  );
+
+  useEffect(() => {
+    if (!compra) return;
+    setCuotaInicial(String(compra.cuota_inicial_monto));
+    setCuotaAdelantada(String(compra.monto_cuota_periodo));
+  }, [compra?.id, compra?.cuota_inicial_monto, compra?.monto_cuota_periodo]);
 
   if (!contractSigned(contract)) {
     return (
@@ -73,8 +96,14 @@ export function MotoSelectionPanel({
   }
 
   const compraId = compra.id;
+  const inicialNum = parseMonto(cuotaInicial);
+  const adelantadaNum = parseMonto(cuotaAdelantada);
+  const totalPreview =
+    (inicialNum ?? 0) +
+    (adelantadaNum ?? 0) +
+    (compra.monto_visita_monto ?? 0);
 
-  function savePlacaChasis(e: FormEvent<HTMLFormElement>) {
+  function saveForm(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!userId) {
       toast.error("No se puede guardar sin usuario.");
@@ -87,6 +116,14 @@ export function MotoSelectionPanel({
       toast.error("Placa y chasis son obligatorios.");
       return;
     }
+
+    const inicial = parseMonto(cuotaInicial);
+    const adelantada = parseMonto(cuotaAdelantada);
+    if (canEditMontos && (inicial == null || adelantada == null)) {
+      toast.error("Indica montos válidos de cuota.");
+      return;
+    }
+
     startTransition(async () => {
       try {
         await updateDelivery({
@@ -95,7 +132,21 @@ export function MotoSelectionPanel({
           placa,
           chasis,
         });
-        toast.success("Placa y chasis guardados.");
+        if (canEditMontos && inicial != null && adelantada != null) {
+          const montosChanged =
+            inicial !== compra.cuota_inicial_monto ||
+            adelantada !== compra.monto_cuota_periodo;
+          if (montosChanged) {
+            await updateMontosPrimerPagoCompra({
+              userId,
+              compraId,
+              cuotaInicial: inicial,
+              montoCuotaPeriodo: adelantada,
+            });
+          }
+        }
+        toast.success("Datos de la moto guardados.");
+        router.refresh();
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Error al guardar.");
       }
@@ -108,7 +159,7 @@ export function MotoSelectionPanel({
         <CardTitle>Moto seleccionada</CardTitle>
       </CardHeader>
       <CardContent>
-        <form className="flex flex-col gap-4" onSubmit={savePlacaChasis}>
+        <form className="flex flex-col gap-4" onSubmit={saveForm}>
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-muted-foreground">Modelo</dt>
@@ -151,18 +202,56 @@ export function MotoSelectionPanel({
                 disabled={!userId || pending}
               />
             </div>
-            <div>
-              <dt className="text-muted-foreground">Cuota inicial</dt>
-              <dd>{formatCop(compra.cuota_inicial_monto)}</dd>
+            <div className="flex flex-col gap-1.5">
+              <Label
+                htmlFor="moto-cuota-inicial"
+                className="text-muted-foreground"
+              >
+                Cuota inicial
+              </Label>
+              {canEditMontos ? (
+                <Input
+                  id="moto-cuota-inicial"
+                  name="cuota_inicial"
+                  inputMode="numeric"
+                  value={cuotaInicial}
+                  onChange={(e) => setCuotaInicial(e.target.value)}
+                  className="font-medium"
+                  disabled={!userId || pending}
+                />
+              ) : (
+                <dd className="font-medium">
+                  {formatCop(compra.cuota_inicial_monto)}
+                </dd>
+              )}
             </div>
-            <div>
-              <dt className="text-muted-foreground">Cuota adelantada</dt>
-              <dd>{formatCop(compra.monto_cuota_periodo)}</dd>
+            <div className="flex flex-col gap-1.5">
+              <Label
+                htmlFor="moto-cuota-adelantada"
+                className="text-muted-foreground"
+              >
+                Cuota adelantada
+              </Label>
+              {canEditMontos ? (
+                <Input
+                  id="moto-cuota-adelantada"
+                  name="cuota_adelantada"
+                  inputMode="numeric"
+                  value={cuotaAdelantada}
+                  onChange={(e) => setCuotaAdelantada(e.target.value)}
+                  className="font-medium"
+                  disabled={!userId || pending}
+                />
+              ) : (
+                <dd className="font-medium">
+                  {formatCop(compra.monto_cuota_periodo)}
+                </dd>
+              )}
             </div>
             <div className="sm:col-span-2">
               <dt className="text-muted-foreground">Total primer pago</dt>
               <dd className="text-lg font-semibold">
-                {formatCop(compra.monto_total_primer_pago)}
+                {formatCop(canEditMontos ? totalPreview : compra.monto_total_primer_pago)}
               </dd>
             </div>
           </dl>
@@ -174,7 +263,7 @@ export function MotoSelectionPanel({
               className="w-fit"
               disabled={pending}
             >
-              Guardar placa y chasis
+              {pending ? "Guardando…" : "Guardar"}
             </Button>
           ) : null}
         </form>

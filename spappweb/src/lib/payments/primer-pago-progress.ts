@@ -48,21 +48,13 @@ export function conceptoCompleto(
 
 export function puedeEditarAbonoConcepto(
   compra: UserMotoCompraRow,
-  pagos: PagoRow[],
-  contexto: PrimerPagoConcepto,
+  _pagos: PagoRow[],
+  _contexto: PrimerPagoConcepto,
 ): boolean {
-  if (
-    compra.estado === "entregada" ||
-    compra.estado === "saldada" ||
-    compra.estado === "cancelada"
-  ) {
-    return false;
-  }
-  if (compra.estado === "pendiente_pago") return true;
-  if (compra.estado === "lista_retiro" && contexto === "visita") {
-    return !conceptoCompleto(compra, pagos, "visita");
-  }
-  return false;
+  // ponytail: allow fix-ups after confirm until delivery; flags re-sync via DB trigger
+  return (
+    compra.estado === "pendiente_pago" || compra.estado === "lista_retiro"
+  );
 }
 
 export function puedeEditarFrecuenciaPago(

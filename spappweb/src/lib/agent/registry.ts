@@ -339,6 +339,26 @@ export const AGENT_TOOLS = {
     handler: async ({ pagoId, userId }) =>
       (await loadPaymentActions()).removePagoAbono(pagoId, userId),
   }),
+  update_pago_abono: tool({
+    category: "pagos",
+    description:
+      "Corrige monto, referencia, medio o concepto de un abono del primer pago (antes de entregar).",
+    input: z.object({
+      pagoId: z.string().uuid(),
+      userId: z.number().int().positive(),
+      monto: z.number().int().positive(),
+      referencia: z.string().min(1),
+      medioPagoAdmin: z.enum([
+        "nequi_nicolas",
+        "davivienda",
+        "efectivo",
+        "datafono",
+      ]),
+      contexto: z.enum(["inicial", "cuota_adelantada", "visita"]),
+    }),
+    handler: async (args) =>
+      (await loadPaymentActions()).updatePagoAbono(args),
+  }),
 
   // ---------------------------------------------------------------- ENTREGA
   update_delivery: tool({
