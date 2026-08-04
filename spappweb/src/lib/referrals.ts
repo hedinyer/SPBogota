@@ -4,17 +4,22 @@ export const REFERRAL_SOURCES = [
   { slug: "guillen", label: "Guillen" },
   { slug: "yhosmer", label: "Yhosmer" },
   { slug: "fabian", label: "Fabian" },
+  { slug: "olga", label: "Olga" },
 ] as const;
 
 export type ReferralSlug = (typeof REFERRAL_SOURCES)[number]["slug"];
 
 /**
- * Captadores que no se mezclan en colas/listas generales.
- * Sus clientes van en la card "Clientes (Guillen)" (y siguen operables
- * desde la ficha / colas de trabajo). El link público ?ref= sigue guardando
- * referral_source.
+ * Captadores especiales (métricas/equipo/listas Guillen).
+ * El link ?ref=guillen sigue guardando referral_source.
  */
 export const HIDDEN_REFERRAL_SLUGS = ["guillen"] as const;
+
+/**
+ * Guillen creado antes de este instante va a "Clientes (Guillen)".
+ * Desde aquí en adelante entra a "Revisar solicitudes" como el resto.
+ */
+export const GUILLEN_INBOX_CUTOFF_ISO = "2026-08-04T18:00:00.000Z";
 
 export function isHiddenReferral(raw: string | null | undefined): boolean {
   const slug = raw?.trim().toLowerCase();
@@ -22,6 +27,16 @@ export function isHiddenReferral(raw: string | null | undefined): boolean {
     !!slug &&
     (HIDDEN_REFERRAL_SLUGS as readonly string[]).includes(slug)
   );
+}
+
+/** Guillen legacy (antes del corte) → cola propia; Guillen nuevo → flujo normal. */
+export function isSegregatedInboxReferral(
+  raw: string | null | undefined,
+  createdAt: string | null | undefined,
+): boolean {
+  if (!isHiddenReferral(raw)) return false;
+  if (!createdAt) return true;
+  return new Date(createdAt).getTime() < new Date(GUILLEN_INBOX_CUTOFF_ISO).getTime();
 }
 
 const KNOWN = new Set(REFERRAL_SOURCES.map((s) => s.slug));
@@ -38,7 +53,7 @@ export function parseReferralSource(
 /**
  * Sin `ref` (URL /hojadevida) = punto de venta.
  * También vale ?ref=punto-de-venta.
- * ?ref=guillen se guarda como guillen (oculto en este admin).
+ * ?ref=guillen se guarda como guillen (cola propia solo si es anterior al corte).
  */
 export function resolveReferralSource(
   raw: string | null | undefined,

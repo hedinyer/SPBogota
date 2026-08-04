@@ -54,14 +54,51 @@ import {
 } from "@/lib/pipeline/mora-utils";
 import { formatCop } from "@/lib/utils/format";
 import {
+  getAdminClientReferralScope,
+  isPostDeliveryCompraEstado,
+  referralMatchesAdminScope,
+  SCOPED_ADMIN_HIDDEN_QUEUES,
+  SCOPED_ADMIN_POST_DELIVERY_ESTADOS,
+} from "@/lib/auth/admin-client-scope";
+import {
   buildReferralLeaderboard,
+  GUILLEN_INBOX_CUTOFF_ISO,
   isHiddenReferral,
+  isSegregatedInboxReferral,
   rankLeaderboard,
   referralLabel,
   resolveReferralSource,
   type LeaderboardRow,
   type ReferralLeaderboardRow,
 } from "@/lib/referrals";
+
+/** Clientes del referral scoped que aún no tienen moto entregada/saldada. */
+async function loadScopedClientUserIds(
+  supabase: ReturnType<typeof createAdminClient>,
+  scope: string | null,
+): Promise<Set<number> | null> {
+  if (!scope) return null;
+  const { data, error } = await supabase
+    .from("users_documents")
+    .select("user_id")
+    .eq("referral_source", scope);
+  if (error) throw new Error(error.message);
+
+  const ids = new Set((data ?? []).map((d) => d.user_id as number));
+  if (ids.size === 0) return ids;
+
+  const { data: delivered, error: deliveredError } = await supabase
+    .from("user_moto_compra")
+    .select("user_id")
+    .in("user_id", [...ids])
+    .in("estado", [...SCOPED_ADMIN_POST_DELIVERY_ESTADOS]);
+  if (deliveredError) throw new Error(deliveredError.message);
+
+  for (const row of delivered ?? []) {
+    ids.delete(row.user_id as number);
+  }
+  return ids;
+}
 
 function normalizeVisita(raw: unknown): VisitaRow | null {
   if (!raw) return null;
@@ -165,6 +202,7 @@ export async function getClientPipeline(
   userId: number,
 ): Promise<ClientPipeline | null> {
   const supabase = createAdminClient();
+  const clientScope = await getAdminClientReferralScope();
 
   const { data: user, error: userError } = await supabase
     .from("users")
@@ -183,6 +221,15 @@ export async function getClientPipeline(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (
+    !referralMatchesAdminScope(
+      (document?.referral_source as string | null | undefined) ?? null,
+      clientScope,
+    )
+  ) {
+    return null;
+  }
 
   const { data: contract } = await supabase
     .from("digital_contracts")
@@ -209,6 +256,11 @@ export async function getClientPipeline(
     )
     .eq("user_id", userId)
     .maybeSingle();
+
+  // Opinilla: deja de ver al cliente cuando ya le entregaron la moto.
+  if (clientScope && isPostDeliveryCompraEstado(compra?.estado as string | null)) {
+    return null;
+  }
 
   const { data: tracking } = await supabase
     .from("users_tracking")
@@ -495,13 +547,22 @@ async function clientUserIdsWithoutVisita(
   supabase: ReturnType<typeof createAdminClient>,
 ): Promise<number[]> {
   const [{ data: docs }, { data: visitas }] = await Promise.all([
-    supabase.from("users_documents").select("user_id, referral_source"),
+    supabase
+      .from("users_documents")
+      .select("user_id, referral_source, created_at"),
     supabase.from("visitas").select("user_id"),
   ]);
   const withVisita = new Set((visitas ?? []).map((v) => v.user_id as number));
   const ids = new Set<number>();
   for (const d of docs ?? []) {
-    if (isHiddenReferral(d.referral_source as string | null)) continue;
+    if (
+      isSegregatedInboxReferral(
+        d.referral_source as string | null,
+        d.created_at as string | null,
+      )
+    ) {
+      continue;
+    }
     const uid = d.user_id as number;
     if (!withVisita.has(uid)) ids.add(uid);
   }
@@ -556,9 +617,20 @@ async function ensureMoraSynced(
 export async function getInboxQueues(): Promise<InboxQueue[]> {
   const supabase = createAdminClient();
   kickMoraSync(supabase);
+  const clientScope = await getAdminClientReferralScope();
+  const scopedIds = await loadScopedClientUserIds(supabase, clientScope);
+  const scopedUserIds = scopedIds ? [...scopedIds] : null;
+  const scopedEmpty = scopedUserIds != null && scopedUserIds.length === 0;
+
+  const withUserScope = <T extends { in: (column: string, values: number[]) => T }>(
+    query: T,
+  ): T => {
+    if (!scopedUserIds || scopedUserIds.length === 0) return query;
+    return query.in("user_id", scopedUserIds);
+  };
 
   const [
-    creditosIds,
+    creditosIdsRaw,
     clientesGuillen,
     visitasSinAsignar,
     visitasProgramadas,
@@ -570,49 +642,84 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
     solicitudesTaller,
   ] = await Promise.all([
     clientUserIdsWithoutVisita(supabase),
-    supabase
-      .from("users_documents")
-      .select("user_id")
-      .eq("referral_source", "guillen"),
-    supabase
-      .from("visitas")
-      .select("id", { count: "exact", head: true })
-      .eq("estado", "pendiente_asignacion"),
-    supabase
-      .from("visitas")
-      .select("id", { count: "exact", head: true })
-      .eq("estado", "asignada"),
-    supabase
-      .from("user_moto_compra")
-      .select("id", { count: "exact", head: true })
-      .eq("estado", "pendiente_pago")
-      .or(
-        "pago_inicial_confirmado.eq.false,pago_cuota_confirmado.eq.false",
-      ),
-    supabase
-      .from("user_moto_compra")
-      .select("id", { count: "exact", head: true })
-      .eq("estado", "lista_retiro")
-      .is("placa", null),
-    supabase
-      .from("user_moto_compra")
-      .select("id", { count: "exact", head: true })
-      .eq("estado", "lista_retiro")
-      .not("placa", "is", null),
-    supabase
-      .from("morosos")
-      .select("id", { count: "exact", head: true })
-      .eq("estado", "activo")
-      .gte("dias_atraso", DIAS_MORA_BANDEJA)
-      .lt("dias_atraso", DIAS_RECOGER_BANDEJA),
-    supabase
-      .from("motos_para_recoger")
-      .select("id", { count: "exact", head: true })
-      .eq("estado", "pendiente"),
-    supabase
-      .from("solicitudes_taller")
-      .select("id", { count: "exact", head: true })
-      .eq("estado", "pendiente"),
+    clientScope
+      ? Promise.resolve({ data: [] as { user_id: number }[], error: null })
+      : supabase
+          .from("users_documents")
+          .select("user_id")
+          .eq("referral_source", "guillen")
+          .lt("created_at", GUILLEN_INBOX_CUTOFF_ISO),
+    scopedEmpty
+      ? Promise.resolve({ count: 0, error: null })
+      : withUserScope(
+          supabase
+            .from("visitas")
+            .select("id", { count: "exact", head: true })
+            .eq("estado", "pendiente_asignacion"),
+        ),
+    scopedEmpty
+      ? Promise.resolve({ count: 0, error: null })
+      : withUserScope(
+          supabase
+            .from("visitas")
+            .select("id", { count: "exact", head: true })
+            .eq("estado", "asignada"),
+        ),
+    scopedEmpty
+      ? Promise.resolve({ count: 0, error: null })
+      : withUserScope(
+          supabase
+            .from("user_moto_compra")
+            .select("id", { count: "exact", head: true })
+            .eq("estado", "pendiente_pago")
+            .or(
+              "pago_inicial_confirmado.eq.false,pago_cuota_confirmado.eq.false",
+            ),
+        ),
+    scopedEmpty
+      ? Promise.resolve({ count: 0, error: null })
+      : withUserScope(
+          supabase
+            .from("user_moto_compra")
+            .select("id", { count: "exact", head: true })
+            .eq("estado", "lista_retiro")
+            .is("placa", null),
+        ),
+    scopedEmpty
+      ? Promise.resolve({ count: 0, error: null })
+      : withUserScope(
+          supabase
+            .from("user_moto_compra")
+            .select("id", { count: "exact", head: true })
+            .eq("estado", "lista_retiro")
+            .not("placa", "is", null),
+        ),
+    scopedEmpty
+      ? Promise.resolve({ count: 0, error: null })
+      : withUserScope(
+          supabase
+            .from("morosos")
+            .select("id", { count: "exact", head: true })
+            .eq("estado", "activo")
+            .gte("dias_atraso", DIAS_MORA_BANDEJA)
+            .lt("dias_atraso", DIAS_RECOGER_BANDEJA),
+        ),
+    scopedEmpty
+      ? Promise.resolve({ count: 0, error: null })
+      : withUserScope(
+          supabase
+            .from("motos_para_recoger")
+            .select("id", { count: "exact", head: true })
+            .eq("estado", "pendiente"),
+        ),
+    scopedEmpty
+      ? Promise.resolve({ count: 0, error: null })
+      : withUserScope(
+          supabase
+            .from("solicitudes_taller")
+            .select("id", { count: "exact", head: true })
+            .eq("estado", "pendiente"),
+        ),
   ]);
 
   if (clientesGuillen.error) throw new Error(clientesGuillen.error.message);
@@ -620,7 +727,11 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
     (clientesGuillen.data ?? []).map((d) => d.user_id as number),
   ).size;
 
-  return [
+  const creditosIds = scopedIds
+    ? creditosIdsRaw.filter((id) => scopedIds.has(id))
+    : creditosIdsRaw;
+
+  const queues: InboxQueue[] = [
     {
       id: "creditos",
       label: "Revisar solicitudes",
@@ -630,7 +741,7 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
     {
       id: "clientes_guillen",
       label: "Clientes (Guillen)",
-      description: "Llegaron por el link de Guillén",
+      description: "Link Guillén anteriores al cambio de flujo",
       count: clientesGuillenCount,
     },
     {
@@ -682,25 +793,49 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
       count: solicitudesTaller.count ?? 0,
     },
   ];
+
+  if (clientScope) {
+    return queues.filter(
+      (q) =>
+        !(SCOPED_ADMIN_HIDDEN_QUEUES as readonly string[]).includes(q.id),
+    );
+  }
+  return queues;
 }
 
 export async function getInboxListItems(
   queueId: InboxQueueId,
 ): Promise<InboxListItem[]> {
   const supabase = createAdminClient();
+  const clientScope = await getAdminClientReferralScope();
+  if (
+    clientScope &&
+    (SCOPED_ADMIN_HIDDEN_QUEUES as readonly string[]).includes(queueId)
+  ) {
+    return [];
+  }
+  const scopedIds = await loadScopedClientUserIds(supabase, clientScope);
+
   if (queueId === "morosos" || queueId === "recoger") {
     await ensureMoraSynced(supabase);
   }
 
+  const filterScoped = (items: InboxListItem[]) =>
+    scopedIds ? items.filter((item) => scopedIds.has(item.userId)) : items;
+
   switch (queueId) {
     case "creditos": {
+      let docsQuery = supabase
+        .from("users_documents")
+        .select(
+          "user_id, estado_solicitud, created_at, selfie_url, referral_source, users(id, user), digital_contracts(hoja_vida_data)",
+        )
+        .order("created_at", { ascending: false });
+      if (clientScope) {
+        docsQuery = docsQuery.eq("referral_source", clientScope);
+      }
       const [docsRes, visitasRes] = await Promise.all([
-        supabase
-          .from("users_documents")
-          .select(
-            "user_id, estado_solicitud, created_at, selfie_url, referral_source, users(id, user), digital_contracts(hoja_vida_data)",
-          )
-          .order("created_at", { ascending: false }),
+        docsQuery,
         supabase.from("visitas").select("user_id"),
       ]);
 
@@ -715,7 +850,14 @@ export async function getInboxListItems(
       for (const row of docsRes.data ?? []) {
         const uid = row.user_id as number;
         if (withVisita.has(uid) || seen.has(uid)) continue;
-        if (isHiddenReferral(row.referral_source as string | null)) continue;
+        if (
+          isSegregatedInboxReferral(
+            row.referral_source as string | null,
+            row.created_at as string | null,
+          )
+        ) {
+          continue;
+        }
         seen.add(uid);
         const users = joinUser(row.users);
         const cedula = users?.user ?? null;
@@ -749,7 +891,7 @@ export async function getInboxListItems(
           queueId,
         });
       }
-      return items;
+      return filterScoped(items);
     }
     case "clientes_guillen": {
       const { data, error } = await supabase
@@ -758,6 +900,7 @@ export async function getInboxListItems(
           "user_id, estado_solicitud, created_at, selfie_url, referral_source, users(id, user), digital_contracts(hoja_vida_data)",
         )
         .eq("referral_source", "guillen")
+        .lt("created_at", GUILLEN_INBOX_CUTOFF_ISO)
         .order("created_at", { ascending: false });
 
       if (error) throw new Error(error.message);
@@ -804,7 +947,7 @@ export async function getInboxListItems(
           queueId,
         });
       }
-      return items;
+      return filterScoped(items);
     }
     case "visitas_sin_asignar":
     case "visitas_programadas": {
@@ -820,23 +963,25 @@ export async function getInboxListItems(
         .eq("estado", estado)
         .order("created_at", { ascending: true });
 
-      return (data ?? []).map((row) => {
-        const client = inboxClientFromUser(
-          row.users as InboxNestedUser | InboxNestedUser[] | null,
-          row.user_id as number,
-          row.cliente_nombre as string | null,
-          row.cliente_celular as string | null,
-        );
-        return {
-          userId: row.user_id as number,
-          ...client,
-          subtitle:
-            queueId === "visitas_sin_asignar"
-              ? "Visita sin asignar"
-              : "Visita programada",
-          queueId,
-        };
-      });
+      return filterScoped(
+        (data ?? []).map((row) => {
+          const client = inboxClientFromUser(
+            row.users as InboxNestedUser | InboxNestedUser[] | null,
+            row.user_id as number,
+            row.cliente_nombre as string | null,
+            row.cliente_celular as string | null,
+          );
+          return {
+            userId: row.user_id as number,
+            ...client,
+            subtitle:
+              queueId === "visitas_sin_asignar"
+                ? "Visita sin asignar"
+                : "Visita programada",
+            queueId,
+          };
+        }),
+      );
     }
     case "pagos": {
       const { data } = await supabase
@@ -850,24 +995,26 @@ export async function getInboxListItems(
         )
         .order("seleccionado_at", { ascending: true });
 
-      return (data ?? []).map((row) => {
-        const client = inboxClientFromUser(
-          row.users as InboxNestedUser | InboxNestedUser[] | null,
-          row.user_id as number,
-        );
-        return {
-          userId: row.user_id as number,
-          ...client,
-          motoImagenUrl: inboxBikeImage(
-            row.bike_table as
-              | { imagen_url: string | null }
-              | { imagen_url: string | null }[]
-              | null,
-          ),
-          subtitle: `${row.modelo} · ${row.color}`,
-          queueId,
-        };
-      });
+      return filterScoped(
+        (data ?? []).map((row) => {
+          const client = inboxClientFromUser(
+            row.users as InboxNestedUser | InboxNestedUser[] | null,
+            row.user_id as number,
+          );
+          return {
+            userId: row.user_id as number,
+            ...client,
+            motoImagenUrl: inboxBikeImage(
+              row.bike_table as
+                | { imagen_url: string | null }
+                | { imagen_url: string | null }[]
+                | null,
+            ),
+            subtitle: `${row.modelo} · ${row.color}`,
+            queueId,
+          };
+        }),
+      );
     }
     case "retiro": {
       const { data } = await supabase
@@ -879,24 +1026,26 @@ export async function getInboxListItems(
         .is("placa", null)
         .order("updated_at", { ascending: true });
 
-      return (data ?? []).map((row) => {
-        const client = inboxClientFromUser(
-          row.users as InboxNestedUser | InboxNestedUser[] | null,
-          row.user_id as number,
-        );
-        return {
-          userId: row.user_id as number,
-          ...client,
-          motoImagenUrl: inboxBikeImage(
-            row.bike_table as
-              | { imagen_url: string | null }
-              | { imagen_url: string | null }[]
-              | null,
-          ),
-          subtitle: `${row.modelo} · Falta placa`,
-          queueId,
-        };
-      });
+      return filterScoped(
+        (data ?? []).map((row) => {
+          const client = inboxClientFromUser(
+            row.users as InboxNestedUser | InboxNestedUser[] | null,
+            row.user_id as number,
+          );
+          return {
+            userId: row.user_id as number,
+            ...client,
+            motoImagenUrl: inboxBikeImage(
+              row.bike_table as
+                | { imagen_url: string | null }
+                | { imagen_url: string | null }[]
+                | null,
+            ),
+            subtitle: `${row.modelo} · Falta placa`,
+            queueId,
+          };
+        }),
+      );
     }
     case "entrega": {
       const { data } = await supabase
@@ -908,24 +1057,26 @@ export async function getInboxListItems(
         .not("placa", "is", null)
         .order("updated_at", { ascending: true });
 
-      return (data ?? []).map((row) => {
-        const client = inboxClientFromUser(
-          row.users as InboxNestedUser | InboxNestedUser[] | null,
-          row.user_id as number,
-        );
-        return {
-          userId: row.user_id as number,
-          ...client,
-          motoImagenUrl: inboxBikeImage(
-            row.bike_table as
-              | { imagen_url: string | null }
-              | { imagen_url: string | null }[]
-              | null,
-          ),
-          subtitle: `${row.modelo} · Placa ${row.placa}`,
-          queueId,
-        };
-      });
+      return filterScoped(
+        (data ?? []).map((row) => {
+          const client = inboxClientFromUser(
+            row.users as InboxNestedUser | InboxNestedUser[] | null,
+            row.user_id as number,
+          );
+          return {
+            userId: row.user_id as number,
+            ...client,
+            motoImagenUrl: inboxBikeImage(
+              row.bike_table as
+                | { imagen_url: string | null }
+                | { imagen_url: string | null }[]
+                | null,
+            ),
+            subtitle: `${row.modelo} · Placa ${row.placa}`,
+            queueId,
+          };
+        }),
+      );
     }
     case "morosos": {
       const { data } = await supabase
@@ -938,40 +1089,42 @@ export async function getInboxListItems(
         .lt("dias_atraso", DIAS_RECOGER_BANDEJA)
         .order("dias_atraso", { ascending: false });
 
-      return (data ?? []).map((row) => {
-        const client = inboxClientFromUser(
-          row.users as InboxNestedUser | InboxNestedUser[] | null,
-          row.user_id as number,
-        );
-        const compraRaw = row.user_moto_compra as
-          | {
-              modelo?: string;
-              color?: string;
-              placa?: string | null;
-              bike_table?:
-                | { imagen_url: string | null }
-                | { imagen_url: string | null }[]
-                | null;
-            }
-          | {
-              modelo?: string;
-              color?: string;
-              placa?: string | null;
-              bike_table?:
-                | { imagen_url: string | null }
-                | { imagen_url: string | null }[]
-                | null;
-            }[]
-          | null;
-        const compra = Array.isArray(compraRaw) ? compraRaw[0] : compraRaw;
-        return {
-          userId: row.user_id as number,
-          ...client,
-          motoImagenUrl: inboxBikeImage(compra?.bike_table),
-          subtitle: `${compra?.modelo ?? "Moto"} · ${row.dias_atraso} días · ${formatCop(row.monto_adeudado)} · ${compra?.placa ?? "sin placa"}`,
-          queueId,
-        };
-      });
+      return filterScoped(
+        (data ?? []).map((row) => {
+          const client = inboxClientFromUser(
+            row.users as InboxNestedUser | InboxNestedUser[] | null,
+            row.user_id as number,
+          );
+          const compraRaw = row.user_moto_compra as
+            | {
+                modelo?: string;
+                color?: string;
+                placa?: string | null;
+                bike_table?:
+                  | { imagen_url: string | null }
+                  | { imagen_url: string | null }[]
+                  | null;
+              }
+            | {
+                modelo?: string;
+                color?: string;
+                placa?: string | null;
+                bike_table?:
+                  | { imagen_url: string | null }
+                  | { imagen_url: string | null }[]
+                  | null;
+              }[]
+            | null;
+          const compra = Array.isArray(compraRaw) ? compraRaw[0] : compraRaw;
+          return {
+            userId: row.user_id as number,
+            ...client,
+            motoImagenUrl: inboxBikeImage(compra?.bike_table),
+            subtitle: `${compra?.modelo ?? "Moto"} · ${row.dias_atraso} días · ${formatCop(row.monto_adeudado)} · ${compra?.placa ?? "sin placa"}`,
+            queueId,
+          };
+        }),
+      );
     }
     case "recoger": {
       const { data } = await supabase
@@ -982,40 +1135,42 @@ export async function getInboxListItems(
         .eq("estado", "pendiente")
         .order("fecha_ingreso", { ascending: true });
 
-      return (data ?? []).map((row) => {
-        const client = inboxClientFromUser(
-          row.users as InboxNestedUser | InboxNestedUser[] | null,
-          row.user_id as number,
-        );
-        const compraRaw = row.user_moto_compra as
-          | {
-              modelo?: string;
-              color?: string;
-              placa?: string | null;
-              bike_table?:
-                | { imagen_url: string | null }
-                | { imagen_url: string | null }[]
-                | null;
-            }
-          | {
-              modelo?: string;
-              color?: string;
-              placa?: string | null;
-              bike_table?:
-                | { imagen_url: string | null }
-                | { imagen_url: string | null }[]
-                | null;
-            }[]
-          | null;
-        const compra = Array.isArray(compraRaw) ? compraRaw[0] : compraRaw;
-        return {
-          userId: row.user_id as number,
-          ...client,
-          motoImagenUrl: inboxBikeImage(compra?.bike_table),
-          subtitle: `Recoger ${compra?.modelo ?? "moto"} · ${row.dias_atraso} días · ${formatCop(row.monto_adeudado)}`,
-          queueId,
-        };
-      });
+      return filterScoped(
+        (data ?? []).map((row) => {
+          const client = inboxClientFromUser(
+            row.users as InboxNestedUser | InboxNestedUser[] | null,
+            row.user_id as number,
+          );
+          const compraRaw = row.user_moto_compra as
+            | {
+                modelo?: string;
+                color?: string;
+                placa?: string | null;
+                bike_table?:
+                  | { imagen_url: string | null }
+                  | { imagen_url: string | null }[]
+                  | null;
+              }
+            | {
+                modelo?: string;
+                color?: string;
+                placa?: string | null;
+                bike_table?:
+                  | { imagen_url: string | null }
+                  | { imagen_url: string | null }[]
+                  | null;
+              }[]
+            | null;
+          const compra = Array.isArray(compraRaw) ? compraRaw[0] : compraRaw;
+          return {
+            userId: row.user_id as number,
+            ...client,
+            motoImagenUrl: inboxBikeImage(compra?.bike_table),
+            subtitle: `Recoger ${compra?.modelo ?? "moto"} · ${row.dias_atraso} días · ${formatCop(row.monto_adeudado)}`,
+            queueId,
+          };
+        }),
+      );
     }
     case "solicitudes_taller": {
       const { data } = await supabase
@@ -1026,44 +1181,46 @@ export async function getInboxListItems(
         .eq("estado", "pendiente")
         .order("created_at", { ascending: true });
 
-      return (data ?? []).map((row) => {
-        const client = inboxClientFromUser(
-          row.users as InboxNestedUser | InboxNestedUser[] | null,
-          row.user_id as number,
-        );
-        const compraRaw = row.user_moto_compra as
-          | {
-              modelo?: string;
-              placa?: string | null;
-              bike_table?:
-                | { imagen_url: string | null }
-                | { imagen_url: string | null }[]
-                | null;
-            }
-          | {
-              modelo?: string;
-              placa?: string | null;
-              bike_table?:
-                | { imagen_url: string | null }
-                | { imagen_url: string | null }[]
-                | null;
-            }[]
-          | null;
-        const compra = Array.isArray(compraRaw) ? compraRaw[0] : compraRaw;
-        const tipoLabel =
-          row.tipo === "repuestos"
-            ? "Repuestos"
-            : row.tipo === "reparacion"
-              ? "Reparación"
-              : "Cambio aceite";
-        return {
-          userId: row.user_id as number,
-          ...client,
-          motoImagenUrl: inboxBikeImage(compra?.bike_table),
-          subtitle: `${tipoLabel} · ${compra?.modelo ?? "Moto"}`,
-          queueId,
-        };
-      });
+      return filterScoped(
+        (data ?? []).map((row) => {
+          const client = inboxClientFromUser(
+            row.users as InboxNestedUser | InboxNestedUser[] | null,
+            row.user_id as number,
+          );
+          const compraRaw = row.user_moto_compra as
+            | {
+                modelo?: string;
+                placa?: string | null;
+                bike_table?:
+                  | { imagen_url: string | null }
+                  | { imagen_url: string | null }[]
+                  | null;
+              }
+            | {
+                modelo?: string;
+                placa?: string | null;
+                bike_table?:
+                  | { imagen_url: string | null }
+                  | { imagen_url: string | null }[]
+                  | null;
+              }[]
+            | null;
+          const compra = Array.isArray(compraRaw) ? compraRaw[0] : compraRaw;
+          const tipoLabel =
+            row.tipo === "repuestos"
+              ? "Repuestos"
+              : row.tipo === "reparacion"
+                ? "Reparación"
+                : "Cambio aceite";
+          return {
+            userId: row.user_id as number,
+            ...client,
+            motoImagenUrl: inboxBikeImage(compra?.bike_table),
+            subtitle: `${tipoLabel} · ${compra?.modelo ?? "Moto"}`,
+            queueId,
+          };
+        }),
+      );
     }
     default:
       return [];
@@ -1431,13 +1588,16 @@ export async function getAvailableBikes(): Promise<BikeRow[]> {
 
 export async function getAllVendidasMotos(): Promise<VendidaMotoRow[]> {
   const supabase = createAdminClient();
+  const clientScope = await getAdminClientReferralScope();
+  // Opinilla no opera cartera post-entrega; Vendidas/En calle son de admin pleno.
+  if (clientScope) return [];
   // ponytail: hint FK — user_moto_compra↔garaje_motos tiene 2 relaciones
   const [{ data, error }, { data: atrasos, error: atrasosError }] =
     await Promise.all([
       supabase
         .from("user_moto_compra")
         .select(
-          "id, user_id, bike_id, modelo, color, frecuencia_pago, cuota_inicial_monto, monto_cuota_periodo, monto_total_primer_pago, estado, pago_inicial_confirmado, pago_cuota_confirmado, placa, chasis, referencia, fecha_entrega, estado_fisico, seleccionado_at, users(id, user, users_documents(selfie_url)), bike_table(imagen_url), morosos(estado, dias_atraso, monto_adeudado), motos_para_recoger(estado, dias_atraso), garaje_motos!garaje_motos_user_moto_compra_id_fkey(id)",
+          "id, user_id, bike_id, modelo, color, frecuencia_pago, cuota_inicial_monto, monto_cuota_periodo, monto_total_primer_pago, estado, pago_inicial_confirmado, pago_cuota_confirmado, placa, chasis, referencia, fecha_entrega, estado_fisico, seleccionado_at, users(id, user, users_documents(selfie_url, referral_source)), bike_table(imagen_url), morosos(estado, dias_atraso, monto_adeudado), motos_para_recoger(estado, dias_atraso), garaje_motos!garaje_motos_user_moto_compra_id_fkey(id)",
         )
         .in("estado", ["entregada", "saldada"])
         .order("fecha_entrega", { ascending: false, nullsFirst: false })
@@ -1790,6 +1950,7 @@ export async function searchClients(
   if (q.length < 2) return [];
 
   const supabase = createAdminClient();
+  const clientScope = await getAdminClientReferralScope();
   const pattern = `%${escapeIlike(q)}%`;
   const matchLabels = new Map<number, string>();
   const matchPriorities = new Map<number, number>();
@@ -1916,6 +2077,7 @@ export async function searchClients(
     const doc = docs[0] ?? null;
     const rawReferral =
       docs.find((d) => d.referral_source)?.referral_source ?? null;
+    if (!referralMatchesAdminScope(rawReferral, clientScope)) return [];
 
     const visitaRaw = user.visitas;
     const visita = Array.isArray(visitaRaw) ? visitaRaw[0] : visitaRaw;
@@ -1977,7 +2139,9 @@ export async function listClientesMotoCredito(
   options?: { onlyGuillen?: boolean },
 ): Promise<ClientSearchResult[]> {
   const supabase = createAdminClient();
+  const clientScope = await getAdminClientReferralScope();
   const onlyGuillen = options?.onlyGuillen === true;
+  if (clientScope && onlyGuillen) return [];
 
   const { data: compras, error } = await supabase
     .from("user_moto_compra")
@@ -2115,6 +2279,7 @@ export async function listClientesMotoCredito(
     const doc = docs[0] ?? null;
     const rawReferral =
       docs.find((d) => d.referral_source)?.referral_source ?? null;
+    if (!referralMatchesAdminScope(rawReferral, clientScope)) return [];
     const isGuillen = isHiddenReferral(rawReferral);
     if (onlyGuillen ? !isGuillen : isGuillen) return [];
     const bikeRaw = compra.bike_table;

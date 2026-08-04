@@ -5,41 +5,62 @@ import {
   commissionPeriodFromKey,
   currentCommissionPeriod,
   filterVisitadoresForReferral,
+  GUILLEN_INBOX_CUTOFF_ISO,
   isHiddenReferral,
+  isSegregatedInboxReferral,
   parseReferralSource,
   rankLeaderboard,
   referralLabel,
   resolveReferralSource,
   shiftCommissionPeriod,
   visitadorMatchesReferral,
-} from "./referrals";
+} from "./referrals.ts";
 
 assert.equal(parseReferralSource("guillen"), "guillen");
 assert.equal(isHiddenReferral("guillen"), true);
 assert.equal(isHiddenReferral("Guillen"), true);
 assert.equal(isHiddenReferral("yhosmer"), false);
 assert.equal(isHiddenReferral(null), false);
+assert.equal(
+  isSegregatedInboxReferral("guillen", "2026-08-01T12:00:00.000Z"),
+  true,
+);
+assert.equal(
+  isSegregatedInboxReferral("guillen", GUILLEN_INBOX_CUTOFF_ISO),
+  false,
+);
+assert.equal(
+  isSegregatedInboxReferral("guillen", "2026-08-05T00:00:00.000Z"),
+  false,
+);
+assert.equal(isSegregatedInboxReferral("fabian", "2026-08-01T12:00:00.000Z"), false);
+assert.equal(isSegregatedInboxReferral("guillen", null), true);
 assert.equal(parseReferralSource("Yhosmer"), "yhosmer");
 assert.equal(parseReferralSource("fabian"), "fabian");
+assert.equal(parseReferralSource("olga"), "olga");
 assert.equal(parseReferralSource("punto-de-venta"), "punto-de-venta");
 assert.equal(parseReferralSource("hacker"), null);
 assert.equal(referralLabel("fabian"), "Fabian");
+assert.equal(referralLabel("olga"), "Olga");
 assert.equal(referralLabel("guillen"), "Guillen");
 assert.equal(resolveReferralSource(null), "punto-de-venta");
 assert.equal(resolveReferralSource(""), "punto-de-venta");
 assert.equal(resolveReferralSource("guillen"), "guillen");
+assert.equal(resolveReferralSource("olga"), "olga");
 
 const board = buildReferralLeaderboard({
   yhosmer: 5,
   fabian: 5,
   "punto-de-venta": 2,
+  olga: 0,
   guillen: 99,
 });
 assert.equal(board[0].rank, 1);
 assert.equal(board[1].rank, 1);
 assert.equal(board[2].rank, 3);
 assert.equal(board[2].slug, "punto-de-venta");
-assert.equal(board.length, 3);
+assert.equal(board[3].slug, "olga");
+assert.equal(board.length, 4);
 assert.equal(
   board.find((r) => r.slug === "guillen"),
   undefined,
@@ -60,9 +81,13 @@ assert.deepEqual(
   filterVisitadoresForReferral(visitadores, "yhosmer").map((v) => v.id),
   [2],
 );
-// Fabian es captador, no visitador: puede asignarse a cualquiera.
+// Fabian/Olga son captadores, no visitadores: puede asignarse a cualquiera.
 assert.deepEqual(
   filterVisitadoresForReferral(visitadores, "fabian").map((v) => v.id),
+  [1, 2, 3, 4],
+);
+assert.deepEqual(
+  filterVisitadoresForReferral(visitadores, "olga").map((v) => v.id),
   [1, 2, 3, 4],
 );
 assert.deepEqual(
@@ -76,6 +101,7 @@ assert.throws(
 );
 assertVisitadorAllowedForReferral("Yhosmer", "yhosmer");
 assertVisitadorAllowedForReferral("Otro", "fabian");
+assertVisitadorAllowedForReferral("Otro", "olga");
 assertVisitadorAllowedForReferral("Otro", "punto-de-venta");
 assertVisitadorAllowedForReferral("Otro", "guillen");
 

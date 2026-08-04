@@ -6,9 +6,9 @@ import { useEffect, useState, useTransition } from "react";
 import { LogOut, PanelLeft, PanelLeftClose } from "lucide-react";
 import { logoutAdminAction } from "@/lib/actions/auth-actions";
 import {
-  adminNavGroups,
   isChildActive,
   isGroupActive,
+  navGroupsForAdminScope,
 } from "@/components/layout/admin-nav-links";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -22,10 +22,17 @@ import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "admin-sidebar-collapsed";
 
-export function AdminSidebar({ className }: { className?: string }) {
+export function AdminSidebar({
+  className,
+  hideEquipo = false,
+}: {
+  className?: string;
+  hideEquipo?: boolean;
+}) {
   const pathname = usePathname();
   const [loggingOut, startLogout] = useTransition();
   const [collapsed, setCollapsed] = useState(false);
+  const navGroups = navGroupsForAdminScope(hideEquipo);
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(STORAGE_KEY) === "true");
@@ -86,7 +93,7 @@ export function AdminSidebar({ className }: { className?: string }) {
 
       <ScrollArea className="flex-1">
         <nav className="flex flex-col gap-3 p-3">
-          {adminNavGroups.map((group) => {
+          {navGroups.map((group) => {
             const Icon = group.icon;
             const groupActive = isGroupActive(pathname, group);
             const hasChildren = group.children.length > 0;

@@ -9,6 +9,7 @@ import {
   colombiaDateParts,
   type ContratoData,
 } from "@/lib/contracts/contrato-renting-clausulas";
+import { documentoAbreviatura } from "@/lib/contracts/hoja-vida-schema";
 import type { FrecuenciaPago } from "@/lib/pipeline/types";
 import {
   generateContratoPdf,
@@ -70,9 +71,14 @@ export async function signContract(input: z.infer<typeof signSchema>) {
   }
 
   const fecha = colombiaDateParts();
+  const hojaRaw = (contract.hoja_vida_data as Record<string, unknown>) ?? {};
+  const tipoDoc = documentoAbreviatura(
+    hojaRaw.tipo_identificacion as string | null | undefined,
+  );
   const contratoData: ContratoData = {
     nombreContratante: parsed.nombre,
     cedulaContratante: parsed.cedula,
+    tipoDocumentoContratante: tipoDoc,
     direccionNotificaciones: parsed.direccion,
     ciudadContratante: parsed.ciudad,
     departamentoContratante: parsed.departamento,
@@ -145,6 +151,7 @@ export async function signContract(input: z.infer<typeof signSchema>) {
       contrato_data: {
         nombre_contratante: parsed.nombre,
         cedula_contratante: parsed.cedula,
+        tipo_documento_contratante: hojaRaw.tipo_identificacion ?? "cc",
         direccion_notificaciones: parsed.direccion,
         ciudad_contratante: parsed.ciudad,
         departamento_contratante: parsed.departamento,

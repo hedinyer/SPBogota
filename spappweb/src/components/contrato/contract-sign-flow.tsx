@@ -56,12 +56,14 @@ interface ContractSignFlowProps {
     direccion: string;
     departamento: string;
     ciudad: string;
+    tipoDocumento: string;
   };
   resumen: { nombre: string; documento: string; celular: string; correo: string };
   comercial: Omit<
     ContratoData,
     | "nombreContratante"
     | "cedulaContratante"
+    | "tipoDocumentoContratante"
     | "direccionNotificaciones"
     | "ciudadContratante"
     | "departamentoContratante"
@@ -152,6 +154,7 @@ export function ContractSignFlow({
   const formData: ContratoData = {
     nombreContratante: nombre,
     cedulaContratante: cedula,
+    tipoDocumentoContratante: prefill.tipoDocumento || "C.C.",
     direccionNotificaciones: direccion,
     ciudadContratante: ciudad,
     departamentoContratante: departamento,

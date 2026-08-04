@@ -6,6 +6,7 @@ import {
 } from "@/lib/colombia-locations";
 import {
   buildDireccionNotificaciones,
+  documentoAbreviatura,
   parseHojaVidaForm,
   type HojaVidaFormData,
 } from "@/lib/contracts/hoja-vida-schema";
@@ -16,6 +17,7 @@ export interface ContractClientPrefill {
   direccion: string;
   departamento: string;
   ciudad: string;
+  tipoDocumento: string;
 }
 
 export { buildDireccionNotificaciones };
@@ -55,6 +57,10 @@ export function prefillFromHojaYContrato(
     direccion: dirStored || buildDireccionNotificaciones(hoja),
     departamento,
     ciudad,
+    tipoDocumento: documentoAbreviatura(
+      (contratoData?.tipo_documento_contratante as string | null | undefined) ??
+        hoja.tipo_identificacion,
+    ),
   };
 }
 

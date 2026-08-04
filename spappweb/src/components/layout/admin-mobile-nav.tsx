@@ -6,9 +6,9 @@ import { useEffect, useRef } from "react";
 import { LogOut, Menu, X } from "lucide-react";
 import { logoutAdminAction } from "@/lib/actions/auth-actions";
 import {
-  adminNavGroups,
   isChildActive,
   isGroupActive,
+  navGroupsForAdminScope,
 } from "@/components/layout/admin-nav-links";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -20,9 +20,10 @@ const headerBtnClass =
 
 const MENU_TOGGLE_ID = "admin-mobile-menu-toggle";
 
-export function AdminMobileNav() {
+export function AdminMobileNav({ hideEquipo = false }: { hideEquipo?: boolean }) {
   const pathname = usePathname();
   const menuRef = useRef<HTMLInputElement>(null);
+  const navGroups = navGroupsForAdminScope(hideEquipo);
 
   function closeMenu() {
     if (menuRef.current) menuRef.current.checked = false;
@@ -115,7 +116,7 @@ export function AdminMobileNav() {
           </div>
           <ScrollArea className="flex-1">
             <nav className="flex flex-col gap-4 p-3">
-              {adminNavGroups.map((group) => {
+              {navGroups.map((group) => {
                 const Icon = group.icon;
                 const groupActive = isGroupActive(pathname, group);
                 const hasChildren = group.children.length > 0;

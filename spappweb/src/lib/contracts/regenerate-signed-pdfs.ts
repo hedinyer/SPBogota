@@ -41,7 +41,13 @@ export async function regenerateSignedContractPdfs(
   }
 
   const signatureDataUrl = `data:image/png;base64,${Buffer.from(await sigFile.arrayBuffer()).toString("base64")}`;
-  const contrato = buildContratoDataFromStored(args.contratoData, args.compra);
+  const contrato = buildContratoDataFromStored(
+    {
+      ...args.contratoData,
+      tipo_documento_contratante: args.hojaVida.tipo_identificacion,
+    },
+    args.compra,
+  );
   const hojaJson = hojaVidaFormToJson(args.hojaVida);
 
   const [hojaVidaPdf, contratoPdf] = await Promise.all([

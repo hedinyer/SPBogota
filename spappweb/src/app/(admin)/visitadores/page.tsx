@@ -1,9 +1,11 @@
-﻿import {
+﻿import { redirect } from "next/navigation";
+import {
   getAllVisitadores,
   getEquipoVisitasDetalle,
   getReferralLeaderboard,
   getReferralLinkLeaderboard,
 } from "@/lib/pipeline/queries";
+import { getAdminClientReferralScope } from "@/lib/auth/admin-client-scope";
 import {
   commissionPeriodFromKey,
   currentCommissionPeriod,
@@ -19,6 +21,9 @@ export default async function VisitadoresPage({
 }: {
   searchParams: Promise<{ periodo?: string; tab?: string }>;
 }) {
+  if (await getAdminClientReferralScope()) {
+    redirect("/inbox");
+  }
   const params = await searchParams;
   const period =
     (params.periodo ? commissionPeriodFromKey(params.periodo) : null) ??

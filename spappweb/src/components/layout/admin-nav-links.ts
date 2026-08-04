@@ -110,4 +110,20 @@ export function isChildActive(pathname: string, href: string): boolean {
   return pathMatchesHref(pathname, href);
 }
 
+/** Nav para admin scoped (Olga): sin Equipo ni cartera post-entrega. */
+export function navGroupsForAdminScope(hideEquipo: boolean): AdminNavGroup[] {
+  if (!hideEquipo) return adminNavGroups;
+  return adminNavGroups
+    .filter((g) => g.id !== "equipo")
+    .map((g) => {
+      if (g.id !== "motos") return g;
+      return {
+        ...g,
+        children: g.children.filter(
+          (c) => c.href !== "/motos-vendidas" && c.href !== "/vendidas",
+        ),
+      };
+    });
+}
+
 export { LogOut as AdminLogoutIcon };

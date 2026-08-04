@@ -137,6 +137,23 @@ export function buildDireccionNotificaciones(hoja: HojaVidaFormData): string {
   return `${calle}, barrio ${barrio}`;
 }
 
+/** Abreviatura en firma/PDF: PPT, C.C., PV, CV. */
+export function documentoAbreviatura(
+  tipo: TipoIdentificacion | string | null | undefined,
+): string {
+  switch (tipo) {
+    case "ppt":
+      return "PPT";
+    case "p":
+      return "PV";
+    case "cv":
+      return "CV";
+    case "cc":
+    default:
+      return "C.C.";
+  }
+}
+
 /** Campos personales del contrato que salen de la hoja de vida. */
 export function patchContratoDataFromHoja(
   contratoData: Record<string, unknown> | null | undefined,
@@ -146,6 +163,7 @@ export function patchContratoDataFromHoja(
     ...(contratoData ?? {}),
     nombre_contratante: hoja.nombre_completo.trim(),
     cedula_contratante: hoja.numero_identificacion.trim(),
+    tipo_documento_contratante: hoja.tipo_identificacion,
     direccion_notificaciones: buildDireccionNotificaciones(hoja),
   };
 }

@@ -59,6 +59,7 @@ const patched = patchContratoDataFromHoja(
 );
 assert.strictEqual(patched.nombre_contratante, "Juan Perez Lopez");
 assert.strictEqual(patched.cedula_contratante, "1234567890");
+assert.strictEqual(patched.tipo_documento_contratante, "cc");
 assert.strictEqual(patched.direccion_notificaciones, "Calle 1, barrio Centro");
 assert.strictEqual(patched.moto_placa, "ABC123");
 

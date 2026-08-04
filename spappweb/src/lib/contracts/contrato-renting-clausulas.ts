@@ -30,6 +30,8 @@ export const EMPRESA_PROPIETARIA = {
 export interface ContratoData {
   nombreContratante: string;
   cedulaContratante: string;
+  /** Abreviatura del doc del contratante en firma (PPT, C.C., …). */
+  tipoDocumentoContratante: string;
   direccionNotificaciones: string;
   ciudadContratante: string;
   departamentoContratante: string;
@@ -112,6 +114,7 @@ export function buildContratoComercial(compra: CompraContratoInput): Omit<
   ContratoData,
   | "nombreContratante"
   | "cedulaContratante"
+  | "tipoDocumentoContratante"
   | "direccionNotificaciones"
   | "ciudadContratante"
   | "departamentoContratante"
@@ -177,9 +180,20 @@ export function buildContratoDataFromStored(
     ),
   });
 
+  const tipoRaw = String(stored.tipo_documento_contratante ?? "").toLowerCase();
+  const tipoDocumentoContratante =
+    tipoRaw === "ppt"
+      ? "PPT"
+      : tipoRaw === "p"
+        ? "PV"
+        : tipoRaw === "cv"
+          ? "CV"
+          : "C.C.";
+
   return {
     nombreContratante: String(stored.nombre_contratante ?? ""),
     cedulaContratante: String(stored.cedula_contratante ?? ""),
+    tipoDocumentoContratante,
     direccionNotificaciones: String(stored.direccion_notificaciones ?? ""),
     ciudadContratante: String(stored.ciudad_contratante ?? ""),
     departamentoContratante: String(stored.departamento_contratante ?? ""),
@@ -354,7 +368,7 @@ Nit: 901.397.015-2
 
 EL CONTRATANTE
 [NOMBRE_CONTRATANTE]
-C.C. [CEDULA_CONTRATANTE]`;
+[TIPO_DOC_CONTRATANTE] [CEDULA_CONTRATANTE]`;
 
 function applyContratantePlaceholders(text: string, form: ContratoData): string {
   return text
@@ -414,6 +428,10 @@ export function renderFirma(form: ContratoData): string {
     .replaceAll("[ANIO]", form.fechaFirmaAnio)
     .replaceAll("[ANIO_NUM]", form.fechaFirmaAnio)
     .replaceAll("[NOMBRE_CONTRATANTE]", form.nombreContratante)
+    .replaceAll(
+      "[TIPO_DOC_CONTRATANTE]",
+      form.tipoDocumentoContratante || "C.C.",
+    )
     .replaceAll("[CEDULA_CONTRATANTE]", form.cedulaContratante);
 }
 
@@ -466,6 +484,7 @@ export function contratoClausulasSelfCheck(): void {
   const intro = renderIntro({
     nombreContratante: "JUAN PEREZ",
     cedulaContratante: "1.000.000",
+    tipoDocumentoContratante: "C.C.",
     direccionNotificaciones: "Calle 1",
     ciudadContratante: "Bucaramanga",
     departamentoContratante: "Santander",
@@ -495,6 +514,7 @@ export function contratoClausulasSelfCheck(): void {
   const rebuilt = buildContratoDataFromStored({
     nombre_contratante: "Ana Lopez",
     cedula_contratante: "123",
+    tipo_documento_contratante: "ppt",
     direccion_notificaciones: "Calle 1, barrio Centro",
     ciudad_contratante: "Bucaramanga",
     departamento_contratante: "Santander",
@@ -512,7 +532,14 @@ export function contratoClausulasSelfCheck(): void {
   if (rebuilt.nombreContratante !== "Ana Lopez" || rebuilt.placa !== "ABC123") {
     throw new Error("buildContratoDataFromStored");
   }
+  if (rebuilt.tipoDocumentoContratante !== "PPT") {
+    throw new Error("buildContratoDataFromStored tipo PPT");
+  }
   if (!rebuilt.formaPagoSaldo.includes("52 CUOTAS SEMANALES")) {
     throw new Error("buildContratoDataFromStored frecuencia");
+  }
+  const firmaPpt = renderFirma({ ...rebuilt, tipoDocumentoContratante: "PPT" });
+  if (!firmaPpt.includes("PPT 123")) {
+    throw new Error("renderFirma PPT");
   }
 }
