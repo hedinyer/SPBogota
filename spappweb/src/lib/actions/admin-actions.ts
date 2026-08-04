@@ -30,6 +30,7 @@ import { storagePathFromPublicUrl } from "@/lib/utils/storage-urls";
 function revalidateClient(userId: number) {
   revalidatePath("/inbox");
   revalidatePath(`/clientes/${userId}`);
+  revalidatePath("/visitadores");
 }
 
 async function assertAdmin() {

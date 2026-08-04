@@ -88,21 +88,44 @@ assert.equal(visitadoresBoard[0].rank, 1);
 assert.equal(visitadoresBoard[1].rank, 1);
 assert.equal(visitadoresBoard[2].rank, 3);
 
-const jul = commissionPeriodFromKey("2026-07");
+const jul = commissionPeriodFromKey("2026-07-20");
 assert.ok(jul);
-assert.equal(jul!.key, "2026-07");
+assert.equal(jul!.key, "2026-07-20");
 assert.equal(jul!.startIso, new Date("2026-07-20T00:00:00.000-05:00").toISOString());
 assert.equal(jul!.endExclusiveIso, new Date("2026-08-06T00:00:00.000-05:00").toISOString());
 assert.match(jul!.label, /20.*– 5/);
 
-const midMonth = currentCommissionPeriod(new Date("2026-07-15T15:00:00-05:00"));
-assert.equal(midMonth.key, "2026-06"); // 20 jun → 5 jul (cerrado)
-const lateMonth = currentCommissionPeriod(new Date("2026-07-25T12:00:00-05:00"));
-assert.equal(lateMonth.key, "2026-07");
-const earlyMonth = currentCommissionPeriod(new Date("2026-08-03T12:00:00-05:00"));
-assert.equal(earlyMonth.key, "2026-07");
+const legacy = commissionPeriodFromKey("2026-07");
+assert.equal(legacy?.key, "2026-07-20");
 
-assert.equal(shiftCommissionPeriod("2026-07", -1)?.key, "2026-06");
-assert.equal(shiftCommissionPeriod("2026-07", 1)?.key, "2026-08");
+const mid5 = commissionPeriodFromKey("2026-08-05");
+assert.ok(mid5);
+assert.equal(mid5!.startIso, new Date("2026-08-05T00:00:00.000-05:00").toISOString());
+assert.equal(mid5!.endExclusiveIso, new Date("2026-08-21T00:00:00.000-05:00").toISOString());
+assert.match(mid5!.label, /5.*– 20/);
+
+// 1–4 ago → aún en 20 jul–5 ago; 5–19 → 5–20 ago; ≥20 → 20 ago–5 sep
+assert.equal(
+  currentCommissionPeriod(new Date("2026-08-03T12:00:00-05:00")).key,
+  "2026-07-20",
+);
+assert.equal(
+  currentCommissionPeriod(new Date("2026-07-15T15:00:00-05:00")).key,
+  "2026-07-05",
+);
+assert.equal(
+  currentCommissionPeriod(new Date("2026-07-25T12:00:00-05:00")).key,
+  "2026-07-20",
+);
+assert.equal(
+  currentCommissionPeriod(new Date("2026-08-10T12:00:00-05:00")).key,
+  "2026-08-05",
+);
+
+assert.equal(shiftCommissionPeriod("2026-07-20", 1)?.key, "2026-08-05");
+assert.equal(shiftCommissionPeriod("2026-08-05", 1)?.key, "2026-08-20");
+assert.equal(shiftCommissionPeriod("2026-07-20", -1)?.key, "2026-07-05");
+assert.equal(shiftCommissionPeriod("2026-07-05", -1)?.key, "2026-06-20");
+assert.equal(shiftCommissionPeriod("2026-07", 1)?.key, "2026-08-05");
 
 console.log("referrals.check: ok");

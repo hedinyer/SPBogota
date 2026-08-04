@@ -100,6 +100,7 @@ export async function selectMotoFromContract(
     revalidatePath(`/clientes/${userId}`);
     revalidatePath(`/moto/${parsed.contractId}`);
     revalidatePath("/garaje");
+    revalidatePath("/visitadores");
     return { ok: true };
   }
 
@@ -132,5 +133,6 @@ export async function selectMotoFromContract(
   revalidatePath("/inbox");
   revalidatePath(`/clientes/${userId}`);
   revalidatePath(`/moto/${parsed.contractId}`);
+  revalidatePath("/visitadores");
   return { ok: true };
 }

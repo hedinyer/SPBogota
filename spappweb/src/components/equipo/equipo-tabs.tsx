@@ -151,7 +151,7 @@ function PeriodNav({
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        Del 20 al 5 del mes siguiente · Bogotá
+        Ciclos intercalados 20→5 y 5→20 · Bogotá
       </p>
     </div>
   );

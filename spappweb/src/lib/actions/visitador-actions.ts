@@ -42,5 +42,6 @@ export async function completeVisitaVisitador(
 
   revalidatePath("/visitador/mis-visitas");
   revalidatePath(`/visitador/visitas/${parsed.visitaId}`);
+  revalidatePath("/visitadores");
   return { ok: true };
 }

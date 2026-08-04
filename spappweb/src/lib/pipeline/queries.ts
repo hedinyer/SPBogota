@@ -1253,9 +1253,10 @@ export async function getReferralLinkLeaderboard(range?: {
 }
 
 /** Visitas asignadas/completadas + ranking de visitadores por completadas. */
-export async function getEquipoVisitasDetalle(): Promise<
-  EquipoVisitasDetalle & { leaderboard: LeaderboardRow[] }
-> {
+export async function getEquipoVisitasDetalle(range?: {
+  startIso: string;
+  endExclusiveIso: string;
+}): Promise<EquipoVisitasDetalle & { leaderboard: LeaderboardRow[] }> {
   const supabase = createAdminClient();
   const [{ data, error }, { data: visitadores, error: visitadoresError }] =
     await Promise.all([
@@ -1301,7 +1302,19 @@ export async function getEquipoVisitasDetalle(): Promise<
     digital_contracts: InboxNestedUser["digital_contracts"];
   };
 
+  const inRange = (iso: string | null | undefined) => {
+    if (!range || !iso) return !range;
+    return iso >= range.startIso && iso < range.endExclusiveIso;
+  };
+
   for (const row of data ?? []) {
+    const createdAt = row.created_at as string;
+    const fechaCompletada = row.fecha_completada as string | null;
+    // Completadas → fecha_completada; asignadas → created_at.
+    const periodAt =
+      row.estado === "completada" ? (fechaCompletada ?? createdAt) : createdAt;
+    if (!inRange(periodAt)) continue;
+
     const usersRaw = row.users as unknown as
       | VisitaDetalleUser
       | VisitaDetalleUser[]
@@ -1362,17 +1375,13 @@ export async function getEquipoVisitasDetalle(): Promise<
     if (row.estado === "completada") {
       completadas.push({
         item,
-        sortAt: new Date(
-          (row.fecha_completada as string | null) ??
-            (row.created_at as string),
-        ).getTime(),
+        sortAt: new Date(fechaCompletada ?? createdAt).getTime(),
       });
     } else {
       asignadas.push({
         item,
         sortAt: new Date(
-          (row.fecha_programada as string | null) ??
-            (row.created_at as string),
+          (row.fecha_programada as string | null) ?? createdAt,
         ).getTime(),
       });
     }

@@ -11,6 +11,9 @@ import {
 import { EquipoTabs } from "@/components/equipo/equipo-tabs";
 import { PageHeader } from "@/components/layout/page-header";
 
+// Métricas de comisión deben leer siempre datos frescos.
+export const dynamic = "force-dynamic";
+
 export default async function VisitadoresPage({
   searchParams,
 }: {
@@ -30,7 +33,7 @@ export default async function VisitadoresPage({
       getAllVisitadores(),
       getReferralLeaderboard(range),
       getReferralLinkLeaderboard(range),
-      getEquipoVisitasDetalle(),
+      getEquipoVisitasDetalle(range),
     ]);
 
   const tab =
@@ -49,6 +52,7 @@ export default async function VisitadoresPage({
         description="Visitadores, vendedores y ranking de captación."
       />
       <EquipoTabs
+        key={period.key}
         visitadores={visitadores}
         leaderboard={leaderboard}
         linkLeaderboard={linkLeaderboard}

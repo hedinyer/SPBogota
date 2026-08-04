@@ -143,14 +143,19 @@ export function buildReferralLeaderboard(
   );
 }
 
-/** Ciclo de comisiones: día 20 del mes M → día 5 del mes M+1 (ambos inclusive, Bogotá). */
+/**
+ * Ciclos intercalados (Bogotá, extremos inclusive):
+ * 20 del mes → 5 del siguiente, luego 5 → 20 del mismo mes, y así.
+ * key = fecha de inicio YYYY-MM-DD (día 05 o 20).
+ */
 export type CommissionPeriod = {
-  /** Mes de inicio YYYY-MM (el que contiene el día 20). */
   key: string;
   startIso: string;
   endExclusiveIso: string;
   label: string;
 };
+
+type PeriodStartDay = 5 | 20;
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -168,7 +173,7 @@ function bogotaYmd(d = new Date()) {
   return { y: get("year"), m: get("month"), d: get("day") };
 }
 
-/** Instantáneo Bogotá → ISO UTC. Fin exclusivo = día 6 00:00. */
+/** Instantáneo Bogotá → ISO UTC. */
 function bogotaDayStartIso(y: number, m: number, d: number) {
   return new Date(
     `${y}-${pad2(m)}-${pad2(d)}T00:00:00.000-05:00`,
@@ -189,43 +194,89 @@ function monthShort(y: number, m: number) {
   return MONTH_LABEL.format(new Date(Date.UTC(y, m - 1, 1))).replace(/\.$/, "");
 }
 
-export function commissionPeriodFromKey(key: string): CommissionPeriod | null {
-  const m = /^(\d{4})-(\d{2})$/.exec(key.trim());
-  if (!m) return null;
-  const y = Number(m[1]);
-  const month = Number(m[2]);
-  if (month < 1 || month > 12) return null;
-  const next = addCalendarMonths(y, month, 1);
-  const startIso = bogotaDayStartIso(y, month, 20);
-  const endExclusiveIso = bogotaDayStartIso(next.y, next.m, 6);
+function buildCommissionPeriod(
+  y: number,
+  m: number,
+  startDay: PeriodStartDay,
+): CommissionPeriod {
+  if (startDay === 20) {
+    const next = addCalendarMonths(y, m, 1);
+    return {
+      key: `${y}-${pad2(m)}-20`,
+      startIso: bogotaDayStartIso(y, m, 20),
+      // inclusive hasta el 5 → fin exclusivo = 6
+      endExclusiveIso: bogotaDayStartIso(next.y, next.m, 6),
+      label: `20 ${monthShort(y, m)} – 5 ${monthShort(next.y, next.m)} ${next.y}`,
+    };
+  }
   return {
-    key: `${y}-${pad2(month)}`,
-    startIso,
-    endExclusiveIso,
-    label: `20 ${monthShort(y, month)} – 5 ${monthShort(next.y, next.m)} ${next.y}`,
+    key: `${y}-${pad2(m)}-05`,
+    startIso: bogotaDayStartIso(y, m, 5),
+    // inclusive hasta el 20 → fin exclusivo = 21
+    endExclusiveIso: bogotaDayStartIso(y, m, 21),
+    label: `5 ${monthShort(y, m)} – 20 ${monthShort(y, m)} ${y}`,
   };
 }
 
-/** Periodo de comisión vigente para `now` (si día 6–19 → el cerrado más reciente). */
-export function currentCommissionPeriod(now = new Date()): CommissionPeriod {
-  const { y, m, d } = bogotaYmd(now);
-  let startY = y;
-  let startM = m;
-  if (d < 20) {
-    const prev = addCalendarMonths(y, m, -1);
-    startY = prev.y;
-    startM = prev.m;
+export function commissionPeriodFromKey(key: string): CommissionPeriod | null {
+  const full = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key.trim());
+  if (full) {
+    const y = Number(full[1]);
+    const month = Number(full[2]);
+    const day = Number(full[3]);
+    if (month < 1 || month > 12) return null;
+    if (day !== 5 && day !== 20) return null;
+    return buildCommissionPeriod(y, month, day as PeriodStartDay);
   }
-  return commissionPeriodFromKey(`${startY}-${pad2(startM)}`)!;
+  // Compat: YYYY-MM = ciclo que empieza el 20 de ese mes.
+  const legacy = /^(\d{4})-(\d{2})$/.exec(key.trim());
+  if (!legacy) return null;
+  const y = Number(legacy[1]);
+  const month = Number(legacy[2]);
+  if (month < 1 || month > 12) return null;
+  return buildCommissionPeriod(y, month, 20);
 }
 
+/** Periodo vigente para `now` (Bogotá). */
+export function currentCommissionPeriod(now = new Date()): CommissionPeriod {
+  const { y, m, d } = bogotaYmd(now);
+  if (d >= 20) return buildCommissionPeriod(y, m, 20);
+  if (d >= 5) return buildCommissionPeriod(y, m, 5);
+  const prev = addCalendarMonths(y, m, -1);
+  return buildCommissionPeriod(prev.y, prev.m, 20);
+}
+
+/** Avanza/retrocede periodos intercalados (20→5, 5→20, …). */
 export function shiftCommissionPeriod(
   key: string,
-  deltaMonths: number,
+  deltaSteps: number,
 ): CommissionPeriod | null {
   const cur = commissionPeriodFromKey(key);
-  if (!cur) return null;
-  const [y, m] = cur.key.split("-").map(Number);
-  const next = addCalendarMonths(y, m, deltaMonths);
-  return commissionPeriodFromKey(`${next.y}-${pad2(next.m)}`);
+  if (!cur || deltaSteps === 0) return cur;
+  const parts = /^(\d{4})-(\d{2})-(05|20)$/.exec(cur.key);
+  if (!parts) return null;
+  let y = Number(parts[1]);
+  let m = Number(parts[2]);
+  let day = Number(parts[3]) as PeriodStartDay;
+  const dir = deltaSteps > 0 ? 1 : -1;
+  for (let i = 0; i < Math.abs(deltaSteps); i++) {
+    if (dir > 0) {
+      if (day === 20) {
+        const next = addCalendarMonths(y, m, 1);
+        y = next.y;
+        m = next.m;
+        day = 5;
+      } else {
+        day = 20;
+      }
+    } else if (day === 5) {
+      const prev = addCalendarMonths(y, m, -1);
+      y = prev.y;
+      m = prev.m;
+      day = 20;
+    } else {
+      day = 5;
+    }
+  }
+  return buildCommissionPeriod(y, m, day);
 }
