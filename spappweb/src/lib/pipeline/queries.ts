@@ -621,13 +621,11 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
   const scopedIds = await loadScopedClientUserIds(supabase, clientScope);
   const scopedUserIds = scopedIds ? [...scopedIds] : null;
   const scopedEmpty = scopedUserIds != null && scopedUserIds.length === 0;
-
-  const withUserScope = <T extends { in: (column: string, values: number[]) => T }>(
-    query: T,
-  ): T => {
-    if (!scopedUserIds || scopedUserIds.length === 0) return query;
-    return query.in("user_id", scopedUserIds);
-  };
+  // ponytail: any corta la recursión de tipos del query builder de Supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const scopeIn = (query: any) =>
+    scopedUserIds?.length ? query.in("user_id", scopedUserIds) : query;
+  const emptyCount = { count: 0, error: null as null };
 
   const [
     creditosIdsRaw,
@@ -650,24 +648,24 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
           .eq("referral_source", "guillen")
           .lt("created_at", GUILLEN_INBOX_CUTOFF_ISO),
     scopedEmpty
-      ? Promise.resolve({ count: 0, error: null })
-      : withUserScope(
+      ? Promise.resolve(emptyCount)
+      : scopeIn(
           supabase
             .from("visitas")
             .select("id", { count: "exact", head: true })
             .eq("estado", "pendiente_asignacion"),
         ),
     scopedEmpty
-      ? Promise.resolve({ count: 0, error: null })
-      : withUserScope(
+      ? Promise.resolve(emptyCount)
+      : scopeIn(
           supabase
             .from("visitas")
             .select("id", { count: "exact", head: true })
             .eq("estado", "asignada"),
         ),
     scopedEmpty
-      ? Promise.resolve({ count: 0, error: null })
-      : withUserScope(
+      ? Promise.resolve(emptyCount)
+      : scopeIn(
           supabase
             .from("user_moto_compra")
             .select("id", { count: "exact", head: true })
@@ -677,8 +675,8 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
             ),
         ),
     scopedEmpty
-      ? Promise.resolve({ count: 0, error: null })
-      : withUserScope(
+      ? Promise.resolve(emptyCount)
+      : scopeIn(
           supabase
             .from("user_moto_compra")
             .select("id", { count: "exact", head: true })
@@ -686,8 +684,8 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
             .is("placa", null),
         ),
     scopedEmpty
-      ? Promise.resolve({ count: 0, error: null })
-      : withUserScope(
+      ? Promise.resolve(emptyCount)
+      : scopeIn(
           supabase
             .from("user_moto_compra")
             .select("id", { count: "exact", head: true })
@@ -695,8 +693,8 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
             .not("placa", "is", null),
         ),
     scopedEmpty
-      ? Promise.resolve({ count: 0, error: null })
-      : withUserScope(
+      ? Promise.resolve(emptyCount)
+      : scopeIn(
           supabase
             .from("morosos")
             .select("id", { count: "exact", head: true })
@@ -705,16 +703,16 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
             .lt("dias_atraso", DIAS_RECOGER_BANDEJA),
         ),
     scopedEmpty
-      ? Promise.resolve({ count: 0, error: null })
-      : withUserScope(
+      ? Promise.resolve(emptyCount)
+      : scopeIn(
           supabase
             .from("motos_para_recoger")
             .select("id", { count: "exact", head: true })
             .eq("estado", "pendiente"),
         ),
     scopedEmpty
-      ? Promise.resolve({ count: 0, error: null })
-      : withUserScope(
+      ? Promise.resolve(emptyCount)
+      : scopeIn(
           supabase
             .from("solicitudes_taller")
             .select("id", { count: "exact", head: true })
