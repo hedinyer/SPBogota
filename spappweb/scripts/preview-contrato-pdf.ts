@@ -42,6 +42,7 @@ async function main() {
       ...comercial,
       nombreContratante: "JUAN CARLOS EJEMPLO",
       cedulaContratante: "1.234.567.890",
+      tipoDocumentoContratante: "C.C.",
       direccionNotificaciones: "Calle 45 #12-34, barrio Centro",
       ciudadContratante: "Bucaramanga",
       departamentoContratante: "Santander",
