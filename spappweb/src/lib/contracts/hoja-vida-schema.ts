@@ -129,6 +129,27 @@ export function hojaVidaFormToJson(form: HojaVidaFormData): Record<string, unkno
   };
 }
 
+export function buildDireccionNotificaciones(hoja: HojaVidaFormData): string {
+  const calle = hoja.direccion.trim();
+  const barrio = hoja.barrio.trim();
+  if (!calle) return "";
+  if (!barrio) return calle;
+  return `${calle}, barrio ${barrio}`;
+}
+
+/** Campos personales del contrato que salen de la hoja de vida. */
+export function patchContratoDataFromHoja(
+  contratoData: Record<string, unknown> | null | undefined,
+  hoja: HojaVidaFormData,
+): Record<string, unknown> {
+  return {
+    ...(contratoData ?? {}),
+    nombre_contratante: hoja.nombre_completo.trim(),
+    cedula_contratante: hoja.numero_identificacion.trim(),
+    direccion_notificaciones: buildDireccionNotificaciones(hoja),
+  };
+}
+
 export const TIPO_IDENTIFICACION_LABELS: Record<TipoIdentificacion, string> = {
   ppt: "Permiso Temporal de Permanencia (PPT)",
   cc: "Cédula de Ciudadanía (CC)",

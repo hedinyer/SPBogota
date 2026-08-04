@@ -5,6 +5,7 @@ import {
   listCiudades,
 } from "@/lib/colombia-locations";
 import {
+  buildDireccionNotificaciones,
   parseHojaVidaForm,
   type HojaVidaFormData,
 } from "@/lib/contracts/hoja-vida-schema";
@@ -17,16 +18,10 @@ export interface ContractClientPrefill {
   ciudad: string;
 }
 
+export { buildDireccionNotificaciones };
+
 function hojaTieneDatos(hoja: HojaVidaFormData): boolean {
   return Boolean(hoja.nombre_completo.trim() && hoja.numero_identificacion.trim());
-}
-
-export function buildDireccionNotificaciones(hoja: HojaVidaFormData): string {
-  const calle = hoja.direccion.trim();
-  const barrio = hoja.barrio.trim();
-  if (!calle) return "";
-  if (!barrio) return calle;
-  return `${calle}, barrio ${barrio}`;
 }
 
 function ciudadValida(departamento: string, ciudad: string): boolean {

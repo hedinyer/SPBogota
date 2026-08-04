@@ -47,8 +47,13 @@ export function ContractReadonlyPanel({ contract }: ContractReadonlyPanelProps) 
     );
   }
 
-  const hojaPdf = getContractPublicUrl(contract.hoja_vida_pdf_path);
-  const contratoPdf = getContractPublicUrl(contract.contrato_pdf_path);
+  const cacheBust = contract.updated_at
+    ? `?v=${encodeURIComponent(contract.updated_at)}`
+    : "";
+  const hojaPdfRaw = getContractPublicUrl(contract.hoja_vida_pdf_path);
+  const contratoPdfRaw = getContractPublicUrl(contract.contrato_pdf_path);
+  const hojaPdf = hojaPdfRaw ? `${hojaPdfRaw}${cacheBust}` : null;
+  const contratoPdf = contratoPdfRaw ? `${contratoPdfRaw}${cacheBust}` : null;
 
   return (
     <Card>
@@ -56,7 +61,7 @@ export function ContractReadonlyPanel({ contract }: ContractReadonlyPanelProps) 
         <div>
           <CardTitle>Contrato digital</CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            PDFs en solo lectura; la hoja de vida se puede editar
+            Al editar la hoja de vida se actualiza el contrato y se regeneran los PDFs
           </p>
         </div>
         <Badge variant="outline" className="w-fit border-border">
@@ -138,7 +143,7 @@ function HojaVidaAdminEditor({ contract }: { contract: DigitalContractRow }) {
         toast.error(result.error);
         return;
       }
-      toast.success("Hoja de vida actualizada.");
+      toast.success("Hoja de vida, contrato y PDFs actualizados.");
       setEditing(false);
       router.refresh();
     });

@@ -13,11 +13,18 @@ import {
 import { canChooseFlowOrder } from "@/lib/pipeline/step-logic";
 import { MIN_CUOTA_INICIAL } from "@/lib/moto-payment";
 import { MONTO_VISITA_DEFAULT } from "@/lib/payments/visita-monto";
-import type { VisitaRow, UserMotoCompraRow } from "@/lib/pipeline/types";
+import type { CompraContratoInput } from "@/lib/contracts/contrato-renting-clausulas";
 import {
   hojaVidaFormSchema,
   hojaVidaFormToJson,
+  patchContratoDataFromHoja,
 } from "@/lib/contracts/hoja-vida-schema";
+import { regenerateSignedContractPdfs } from "@/lib/contracts/regenerate-signed-pdfs";
+import type {
+  FrecuenciaPago,
+  UserMotoCompraRow,
+  VisitaRow,
+} from "@/lib/pipeline/types";
 import {
   appendTitularidadHistorial,
   assertCanTransferTitularidad,
@@ -159,19 +166,81 @@ const updateContractHojaVidaSchema = z.object({
   hojaVida: hojaVidaFormSchema,
 });
 
-/** Admin corrige datos de hoja de vida en el contrato (no regenera PDFs). */
+/** Admin corrige hoja de vida, sincroniza contrato_data y regenera PDFs si ya está firmado. */
 export async function updateContractHojaVida(
   input: z.infer<typeof updateContractHojaVidaSchema>,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const parsed = updateContractHojaVidaSchema.parse(input);
     const supabase = await assertAdmin();
+
+    const { data: existing, error: fetchError } = await supabase
+      .from("digital_contracts")
+      .select(
+        "contrato_data, signature_path, hoja_vida_pdf_path, contrato_pdf_path, status",
+      )
+      .eq("id", parsed.contractId)
+      .eq("user_id", parsed.userId)
+      .maybeSingle();
+
+    if (fetchError) return { ok: false, error: mapDbError(fetchError.message) };
+    if (!existing) return { ok: false, error: "Contrato no encontrado." };
+
+    const contratoData = patchContratoDataFromHoja(
+      (existing.contrato_data as Record<string, unknown> | null) ?? null,
+      parsed.hojaVida,
+    );
+
+    const updatePayload: Record<string, unknown> = {
+      hoja_vida_data: hojaVidaFormToJson(parsed.hojaVida),
+      contrato_data: contratoData,
+      updated_at: new Date().toISOString(),
+    };
+
+    const signaturePath =
+      typeof existing.signature_path === "string" ? existing.signature_path : null;
+    if (existing.status === "firmado" && signaturePath) {
+      const { data: compra } = await supabase
+        .from("user_moto_compra")
+        .select(
+          "modelo, color, placa, chasis, referencia, frecuencia_pago, cuota_inicial_monto, monto_cuota_periodo",
+        )
+        .eq("user_id", parsed.userId)
+        .maybeSingle();
+
+      const compraInput: CompraContratoInput | null = compra?.placa
+        ? {
+            modelo: compra.modelo as string,
+            color: compra.color as string,
+            placa: compra.placa as string,
+            chasis: (compra.chasis as string) ?? "",
+            referencia: (compra.referencia as string | null) ?? null,
+            frecuencia_pago: compra.frecuencia_pago as FrecuenciaPago,
+            cuota_inicial_monto: compra.cuota_inicial_monto as number,
+            monto_cuota_periodo: compra.monto_cuota_periodo as number,
+          }
+        : null;
+
+      const paths = await regenerateSignedContractPdfs(supabase, {
+        contractId: parsed.contractId,
+        userId: parsed.userId,
+        hojaVida: parsed.hojaVida,
+        contratoData,
+        signaturePath,
+        hojaVidaPdfPath:
+          (existing.hoja_vida_pdf_path as string | null) ?? null,
+        contratoPdfPath:
+          (existing.contrato_pdf_path as string | null) ?? null,
+        compra: compraInput,
+      });
+
+      updatePayload.hoja_vida_pdf_path = paths.hojaVidaPdfPath;
+      updatePayload.contrato_pdf_path = paths.contratoPdfPath;
+    }
+
     const { error } = await supabase
       .from("digital_contracts")
-      .update({
-        hoja_vida_data: hojaVidaFormToJson(parsed.hojaVida),
-        updated_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", parsed.contractId)
       .eq("user_id", parsed.userId);
 

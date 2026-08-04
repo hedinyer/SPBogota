@@ -1,11 +1,15 @@
 import assert from "node:assert";
-import type { HojaVidaFormData } from "./hoja-vida-schema";
+import {
+  buildDireccionNotificaciones,
+  patchContratoDataFromHoja,
+  type HojaVidaFormData,
+} from "./hoja-vida-schema.ts";
 import {
   blocksNewDocumentSubmission,
   formatBirthDateInput,
   isFullName,
   isHojaVidaComplete,
-} from "./hoja-vida-validation";
+} from "./hoja-vida-validation.ts";
 
 const base: HojaVidaFormData = {
   nombre_completo: "Juan Perez Lopez",
@@ -44,5 +48,18 @@ assert.strictEqual(
   "Ya tienes una solicitud en proceso.",
 );
 assert.strictEqual(blocksNewDocumentSubmission(null), null);
+
+assert.strictEqual(
+  buildDireccionNotificaciones(base),
+  "Calle 1, barrio Centro",
+);
+const patched = patchContratoDataFromHoja(
+  { moto_placa: "ABC123", nombre_contratante: "Viejo" },
+  base,
+);
+assert.strictEqual(patched.nombre_contratante, "Juan Perez Lopez");
+assert.strictEqual(patched.cedula_contratante, "1234567890");
+assert.strictEqual(patched.direccion_notificaciones, "Calle 1, barrio Centro");
+assert.strictEqual(patched.moto_placa, "ABC123");
 
 console.log("hoja-vida.check OK");

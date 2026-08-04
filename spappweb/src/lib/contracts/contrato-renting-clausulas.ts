@@ -147,6 +147,49 @@ export function buildContratoComercial(compra: CompraContratoInput): Omit<
   };
 }
 
+const FRECUENCIAS: FrecuenciaPago[] = ["diario", "semanal", "quincenal", "mensual"];
+
+function asFrecuencia(value: unknown): FrecuenciaPago {
+  return FRECUENCIAS.includes(value as FrecuenciaPago)
+    ? (value as FrecuenciaPago)
+    : "diario";
+}
+
+/** Reconstruye ContratoData desde contrato_data guardado (+ compra si hay). */
+export function buildContratoDataFromStored(
+  stored: Record<string, unknown>,
+  compra?: CompraContratoInput | null,
+): ContratoData {
+  const comercial = buildContratoComercial({
+    modelo: String(compra?.modelo ?? stored.moto_modelo ?? ""),
+    color: String(compra?.color ?? stored.moto_color ?? ""),
+    placa: String(compra?.placa ?? stored.moto_placa ?? ""),
+    chasis: String(compra?.chasis ?? stored.moto_chasis ?? ""),
+    referencia: compra?.referencia ?? null,
+    frecuencia_pago: asFrecuencia(
+      compra?.frecuencia_pago ?? stored.frecuencia_pago,
+    ),
+    cuota_inicial_monto: Number(
+      compra?.cuota_inicial_monto ?? stored.cuota_inicial ?? 0,
+    ),
+    monto_cuota_periodo: Number(
+      compra?.monto_cuota_periodo ?? stored.valor_cuota ?? 0,
+    ),
+  });
+
+  return {
+    nombreContratante: String(stored.nombre_contratante ?? ""),
+    cedulaContratante: String(stored.cedula_contratante ?? ""),
+    direccionNotificaciones: String(stored.direccion_notificaciones ?? ""),
+    ciudadContratante: String(stored.ciudad_contratante ?? ""),
+    departamentoContratante: String(stored.departamento_contratante ?? ""),
+    fechaFirmaDia: String(stored.fecha_firma_dia ?? ""),
+    fechaFirmaMes: String(stored.fecha_firma_mes ?? ""),
+    fechaFirmaAnio: String(stored.fecha_firma_anio ?? ""),
+    ...comercial,
+  };
+}
+
 export const introTemplate = `El día [DIA] del mes de [MES] de [ANIO], en la ciudad de Bucaramanga, Santander, entre los suscrito a saber, MARISOL PINILLA RUEDA, mayor de edad, vecina y domiciliada en la ciudad de Bucaramanga, identificada como aparece al pie de su firma, quien en adelante se denominará LA PROPIETARIA, y por otro [NOMBRE_CONTRATANTE], mayor de edad, vecino y domiciliado en Bucaramanga, quien se identifica como aparece al pie de su firma y en adelante se denominará quien en adelante será denominado "EL CONTRATANTE", acuerdan celebrar un "CONTRATO DE RENTING" regido por las siguientes cláusulas:`;
 
 export const blocks: ClausulaBlock[] = [
@@ -447,5 +490,29 @@ export function contratoClausulasSelfCheck(): void {
   });
   if (!intro.includes("MARISOL PINILLA RUEDA") || !intro.includes("LA PROPIETARIA")) {
     throw new Error("renderIntro pinilla");
+  }
+
+  const rebuilt = buildContratoDataFromStored({
+    nombre_contratante: "Ana Lopez",
+    cedula_contratante: "123",
+    direccion_notificaciones: "Calle 1, barrio Centro",
+    ciudad_contratante: "Bucaramanga",
+    departamento_contratante: "Santander",
+    fecha_firma_dia: "4",
+    fecha_firma_mes: "agosto",
+    fecha_firma_anio: "2026",
+    moto_modelo: "X1",
+    moto_color: "Rojo",
+    moto_placa: "ABC123",
+    moto_chasis: "CH1",
+    frecuencia_pago: "semanal",
+    cuota_inicial: 100000,
+    valor_cuota: 50000,
+  });
+  if (rebuilt.nombreContratante !== "Ana Lopez" || rebuilt.placa !== "ABC123") {
+    throw new Error("buildContratoDataFromStored");
+  }
+  if (!rebuilt.formaPagoSaldo.includes("52 CUOTAS SEMANALES")) {
+    throw new Error("buildContratoDataFromStored frecuencia");
   }
 }
