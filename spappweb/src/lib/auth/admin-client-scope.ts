@@ -1,7 +1,7 @@
 /**
  * Admins con vista de clientes limitada a un referral_source.
  *
- * Opinilla (Olga): solo clientes ?ref=olga, desde solicitud hasta entrega de moto.
+ * Opinilla (Olga): clientes ?ref=olga hasta entrega + solicitudes pendientes Guillen.
  * Después de entregada/saldada ya no los ve (mora/recoger queda para admin pleno).
  * Inventario/tienda/garaje siguen completos. adminBogota ve todo de principio a fin.
  */
@@ -14,11 +14,12 @@ const ADMIN_CLIENT_REFERRAL_SCOPE_BY_USER: Record<string, string> = {
 };
 
 /** Colas post-entrega que un admin scoped no ve. */
-export const SCOPED_ADMIN_HIDDEN_QUEUES = [
-  "clientes_guillen",
-  "morosos",
-  "recoger",
-] as const;
+export const SCOPED_ADMIN_HIDDEN_QUEUES = ["morosos", "recoger"] as const;
+
+/** Referrals extras que el admin scoped puede abrir (además de su scope). */
+export const SCOPED_ADMIN_EXTRA_REFERRALS: Record<string, readonly string[]> = {
+  olga: ["guillen"],
+};
 
 export const SCOPED_ADMIN_POST_DELIVERY_ESTADOS = [
   "entregada",
@@ -31,6 +32,17 @@ export function referralMatchesAdminScope(
 ): boolean {
   if (!scope) return true;
   return (referralSource ?? "").trim().toLowerCase() === scope;
+}
+
+/** Olga/listas: solo su slug. Perfil: también extras (p. ej. Guillen). */
+export function referralAllowedForScopedAdmin(
+  referralSource: string | null | undefined,
+  scope: string | null,
+): boolean {
+  if (!scope) return true;
+  const slug = (referralSource ?? "").trim().toLowerCase();
+  if (slug === scope) return true;
+  return (SCOPED_ADMIN_EXTRA_REFERRALS[scope] ?? []).includes(slug);
 }
 
 export function isPostDeliveryCompraEstado(

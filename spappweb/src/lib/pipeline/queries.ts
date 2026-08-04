@@ -56,6 +56,7 @@ import { formatCop } from "@/lib/utils/format";
 import {
   getAdminClientReferralScope,
   isPostDeliveryCompraEstado,
+  referralAllowedForScopedAdmin,
   referralMatchesAdminScope,
   SCOPED_ADMIN_HIDDEN_QUEUES,
   SCOPED_ADMIN_POST_DELIVERY_ESTADOS,
@@ -98,6 +99,30 @@ async function loadScopedClientUserIds(
     ids.delete(row.user_id as number);
   }
   return ids;
+}
+
+/** Guillen sin visita = solicitudes pendientes (para Opinilla). */
+async function guillenPendingSolicitudUserIds(
+  supabase: ReturnType<typeof createAdminClient>,
+): Promise<number[]> {
+  const [{ data: docs, error: docsError }, { data: visitas, error: visitasError }] =
+    await Promise.all([
+      supabase
+        .from("users_documents")
+        .select("user_id")
+        .eq("referral_source", "guillen"),
+      supabase.from("visitas").select("user_id"),
+    ]);
+  if (docsError) throw new Error(docsError.message);
+  if (visitasError) throw new Error(visitasError.message);
+
+  const withVisita = new Set((visitas ?? []).map((v) => v.user_id as number));
+  const ids = new Set<number>();
+  for (const d of docs ?? []) {
+    const uid = d.user_id as number;
+    if (!withVisita.has(uid)) ids.add(uid);
+  }
+  return [...ids];
 }
 
 function normalizeVisita(raw: unknown): VisitaRow | null {
@@ -223,7 +248,7 @@ export async function getClientPipeline(
     .maybeSingle();
 
   if (
-    !referralMatchesAdminScope(
+    !referralAllowedForScopedAdmin(
       (document?.referral_source as string | null | undefined) ?? null,
       clientScope,
     )
@@ -641,7 +666,10 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
   ] = await Promise.all([
     clientUserIdsWithoutVisita(supabase),
     clientScope
-      ? Promise.resolve({ data: [] as { user_id: number }[], error: null })
+      ? guillenPendingSolicitudUserIds(supabase).then((ids) => ({
+          data: ids.map((user_id) => ({ user_id })),
+          error: null,
+        }))
       : supabase
           .from("users_documents")
           .select("user_id")
@@ -738,8 +766,10 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
     },
     {
       id: "clientes_guillen",
-      label: "Clientes (Guillen)",
-      description: "Link Guillén anteriores al cambio de flujo",
+      label: clientScope ? "Solicitudes Guillen" : "Clientes (Guillen)",
+      description: clientScope
+        ? "Pendientes del link Guillén (sin visita)"
+        : "Link Guillén anteriores al cambio de flujo",
       count: clientesGuillenCount,
     },
     {
@@ -892,22 +922,38 @@ export async function getInboxListItems(
       return filterScoped(items);
     }
     case "clientes_guillen": {
-      const { data, error } = await supabase
+      // Opinilla: todas las pendientes Guillen (sin visita). Admin pleno: legado pre-corte.
+      let docsQuery = supabase
         .from("users_documents")
         .select(
           "user_id, estado_solicitud, created_at, selfie_url, referral_source, users(id, user), digital_contracts(hoja_vida_data)",
         )
         .eq("referral_source", "guillen")
-        .lt("created_at", GUILLEN_INBOX_CUTOFF_ISO)
         .order("created_at", { ascending: false });
+      if (!clientScope) {
+        docsQuery = docsQuery.lt("created_at", GUILLEN_INBOX_CUTOFF_ISO);
+      }
 
-      if (error) throw new Error(error.message);
+      const [docsRes, visitasRes] = await Promise.all([
+        docsQuery,
+        clientScope
+          ? supabase.from("visitas").select("user_id")
+          : Promise.resolve({ data: [] as { user_id: number }[], error: null }),
+      ]);
 
+      if (docsRes.error) throw new Error(docsRes.error.message);
+      if (visitasRes.error) throw new Error(visitasRes.error.message);
+
+      const withVisita = new Set(
+        (visitasRes.data ?? []).map((v) => v.user_id as number),
+      );
+      const data = docsRes.data ?? [];
       const seen = new Set<number>();
       const items: InboxListItem[] = [];
-      for (const row of data ?? []) {
+      for (const row of data) {
         const uid = row.user_id as number;
         if (seen.has(uid)) continue;
+        if (clientScope && withVisita.has(uid)) continue;
         seen.add(uid);
         const users = joinUser(row.users);
         const cedula = users?.user ?? null;
@@ -945,7 +991,8 @@ export async function getInboxListItems(
           queueId,
         });
       }
-      return filterScoped(items);
+      // No filtrar por scope Olga: esta cola es Guillen a propósito.
+      return items;
     }
     case "visitas_sin_asignar":
     case "visitas_programadas": {
