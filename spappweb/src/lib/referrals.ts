@@ -61,6 +61,13 @@ export function resolveReferralSource(
   return (parseReferralSource(raw) as ReferralSlug | null) ?? "punto-de-venta";
 }
 
+/** Ranking de compras: Guillen suma a punto de venta. Hojas/link siguen omitiéndolo. */
+export function purchaseLeaderboardReferral(
+  raw: string | null | undefined,
+): ReferralSlug {
+  return isHiddenReferral(raw) ? "punto-de-venta" : resolveReferralSource(raw);
+}
+
 export function referralLabel(slug: string | null | undefined): string | null {
   if (!slug) return null;
   const found = REFERRAL_SOURCES.find((s) => s.slug === slug);

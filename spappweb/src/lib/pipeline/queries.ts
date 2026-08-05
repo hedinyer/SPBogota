@@ -66,6 +66,7 @@ import {
   GUILLEN_INBOX_CUTOFF_ISO,
   isHiddenReferral,
   isSegregatedInboxReferral,
+  purchaseLeaderboardReferral,
   rankLeaderboard,
   referralLabel,
   resolveReferralSource,
@@ -1415,11 +1416,9 @@ export async function getReferralLeaderboard(range?: {
       : user?.users_documents
         ? [user.users_documents]
         : [];
-    // Sin ref (o null histórico) = punto de venta.
     const rawReferral =
       docs.find((d) => d.referral_source)?.referral_source ?? null;
-    if (isHiddenReferral(rawReferral)) continue;
-    const slug = resolveReferralSource(rawReferral);
+    const slug = purchaseLeaderboardReferral(rawReferral);
     counts[slug] = (counts[slug] ?? 0) + 1;
   }
   return buildReferralLeaderboard(counts);

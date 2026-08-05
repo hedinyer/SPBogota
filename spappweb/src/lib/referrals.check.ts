@@ -9,6 +9,7 @@ import {
   isHiddenReferral,
   isSegregatedInboxReferral,
   parseReferralSource,
+  purchaseLeaderboardReferral,
   rankLeaderboard,
   referralLabel,
   resolveReferralSource,
@@ -47,6 +48,9 @@ assert.equal(resolveReferralSource(null), "punto-de-venta");
 assert.equal(resolveReferralSource(""), "punto-de-venta");
 assert.equal(resolveReferralSource("guillen"), "guillen");
 assert.equal(resolveReferralSource("olga"), "olga");
+assert.equal(purchaseLeaderboardReferral("guillen"), "punto-de-venta");
+assert.equal(purchaseLeaderboardReferral(null), "punto-de-venta");
+assert.equal(purchaseLeaderboardReferral("yhosmer"), "yhosmer");
 
 const board = buildReferralLeaderboard({
   yhosmer: 5,
