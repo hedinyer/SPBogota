@@ -10,6 +10,7 @@ import {
   isGroupActive,
   navGroupsForAdminScope,
 } from "@/components/layout/admin-nav-links";
+import { ScopedReferralLink } from "@/components/layout/scoped-referral-link";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -25,9 +26,11 @@ const STORAGE_KEY = "admin-sidebar-collapsed";
 export function AdminSidebar({
   className,
   hideEquipo = false,
+  referralScope = null,
 }: {
   className?: string;
   hideEquipo?: boolean;
+  referralScope?: string | null;
 }) {
   const pathname = usePathname();
   const [loggingOut, startLogout] = useTransition();
@@ -193,7 +196,13 @@ export function AdminSidebar({
       </ScrollArea>
 
       <Separator />
-      <div className="p-3">
+      <div className="flex flex-col gap-3 p-3">
+        {referralScope ? (
+          <ScopedReferralLink
+            referralScope={referralScope}
+            collapsed={collapsed}
+          />
+        ) : null}
         <Button
           type="button"
           variant="ghost"

@@ -5,6 +5,10 @@ export const REFERRAL_SOURCES = [
   { slug: "yhosmer", label: "Yhosmer" },
   { slug: "fabian", label: "Fabian" },
   { slug: "olga", label: "Olga" },
+  { slug: "neisalinas", label: "Neisalinas" },
+  { slug: "sebastianbateca", label: "Sebastián" },
+  { slug: "amormio", label: "Amormio" },
+  { slug: "mauricio", label: "Mauricio" },
 ] as const;
 
 export type ReferralSlug = (typeof REFERRAL_SOURCES)[number]["slug"];

@@ -13,6 +13,8 @@ assert.equal(referralMatchesAdminScope("fabian", "olga"), false);
 assert.equal(referralMatchesAdminScope("guillen", "olga"), false);
 assert.equal(referralAllowedForScopedAdmin("guillen", "olga"), true);
 assert.equal(referralAllowedForScopedAdmin("fabian", "olga"), false);
+assert.equal(referralAllowedForScopedAdmin("guillen", "neisalinas"), false);
+assert.equal(referralAllowedForScopedAdmin("neisalinas", "neisalinas"), true);
 
 assert.equal(isPostDeliveryCompraEstado("entregada"), true);
 assert.equal(isPostDeliveryCompraEstado("saldada"), true);
@@ -31,6 +33,21 @@ assert.equal(
   }),
   "olga",
 );
+for (const [userId, username, scope] of [
+  [184, "Neisalinas", "neisalinas"],
+  [185, "Sebastiánbateca", "sebastianbateca"],
+  [186, "amormio", "amormio"],
+  [187, "Mauricio", "mauricio"],
+] as const) {
+  assert.equal(
+    resolveAdminClientReferralScope({
+      isLoggedIn: true,
+      userId,
+      username,
+    }),
+    scope,
+  );
+}
 assert.equal(
   resolveAdminClientReferralScope({
     isLoggedIn: true,

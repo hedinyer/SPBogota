@@ -667,10 +667,12 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
   ] = await Promise.all([
     clientUserIdsWithoutVisita(supabase),
     clientScope
-      ? guillenPendingSolicitudUserIds(supabase).then((ids) => ({
-          data: ids.map((user_id) => ({ user_id })),
-          error: null,
-        }))
+      ? referralAllowedForScopedAdmin("guillen", clientScope)
+        ? guillenPendingSolicitudUserIds(supabase).then((ids) => ({
+            data: ids.map((user_id) => ({ user_id })),
+            error: null,
+          }))
+        : Promise.resolve({ data: [] as { user_id: number }[], error: null })
       : supabase
           .from("users_documents")
           .select("user_id")
@@ -824,10 +826,19 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
   ];
 
   if (clientScope) {
-    return queues.filter(
-      (q) =>
-        !(SCOPED_ADMIN_HIDDEN_QUEUES as readonly string[]).includes(q.id),
-    );
+    return queues.filter((q) => {
+      if ((SCOPED_ADMIN_HIDDEN_QUEUES as readonly string[]).includes(q.id)) {
+        return false;
+      }
+      // Solo Olga (extras) ve la cola Guillen; el resto solo su propio link.
+      if (
+        q.id === "clientes_guillen" &&
+        !referralAllowedForScopedAdmin("guillen", clientScope)
+      ) {
+        return false;
+      }
+      return true;
+    });
   }
   return queues;
 }
@@ -840,6 +851,13 @@ export async function getInboxListItems(
   if (
     clientScope &&
     (SCOPED_ADMIN_HIDDEN_QUEUES as readonly string[]).includes(queueId)
+  ) {
+    return [];
+  }
+  if (
+    queueId === "clientes_guillen" &&
+    clientScope &&
+    !referralAllowedForScopedAdmin("guillen", clientScope)
   ) {
     return [];
   }

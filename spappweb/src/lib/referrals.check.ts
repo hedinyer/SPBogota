@@ -39,15 +39,21 @@ assert.equal(isSegregatedInboxReferral("guillen", null), true);
 assert.equal(parseReferralSource("Yhosmer"), "yhosmer");
 assert.equal(parseReferralSource("fabian"), "fabian");
 assert.equal(parseReferralSource("olga"), "olga");
+assert.equal(parseReferralSource("neisalinas"), "neisalinas");
+assert.equal(parseReferralSource("sebastianbateca"), "sebastianbateca");
+assert.equal(parseReferralSource("amormio"), "amormio");
+assert.equal(parseReferralSource("mauricio"), "mauricio");
 assert.equal(parseReferralSource("punto-de-venta"), "punto-de-venta");
 assert.equal(parseReferralSource("hacker"), null);
 assert.equal(referralLabel("fabian"), "Fabian");
 assert.equal(referralLabel("olga"), "Olga");
+assert.equal(referralLabel("neisalinas"), "Neisalinas");
 assert.equal(referralLabel("guillen"), "Guillen");
 assert.equal(resolveReferralSource(null), "punto-de-venta");
 assert.equal(resolveReferralSource(""), "punto-de-venta");
 assert.equal(resolveReferralSource("guillen"), "guillen");
 assert.equal(resolveReferralSource("olga"), "olga");
+assert.equal(resolveReferralSource("mauricio"), "mauricio");
 assert.equal(purchaseLeaderboardReferral("guillen"), "punto-de-venta");
 assert.equal(purchaseLeaderboardReferral(null), "punto-de-venta");
 assert.equal(purchaseLeaderboardReferral("yhosmer"), "yhosmer");
@@ -63,8 +69,12 @@ assert.equal(board[0].rank, 1);
 assert.equal(board[1].rank, 1);
 assert.equal(board[2].rank, 3);
 assert.equal(board[2].slug, "punto-de-venta");
-assert.equal(board[3].slug, "olga");
-assert.equal(board.length, 4);
+assert.ok(board.some((r) => r.slug === "olga"));
+assert.ok(board.some((r) => r.slug === "neisalinas"));
+assert.ok(board.some((r) => r.slug === "sebastianbateca"));
+assert.ok(board.some((r) => r.slug === "amormio"));
+assert.ok(board.some((r) => r.slug === "mauricio"));
+assert.equal(board.length, 8);
 assert.equal(
   board.find((r) => r.slug === "guillen"),
   undefined,

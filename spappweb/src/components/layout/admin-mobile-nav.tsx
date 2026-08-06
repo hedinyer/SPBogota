@@ -10,6 +10,7 @@ import {
   isGroupActive,
   navGroupsForAdminScope,
 } from "@/components/layout/admin-nav-links";
+import { ScopedReferralLink } from "@/components/layout/scoped-referral-link";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -20,7 +21,13 @@ const headerBtnClass =
 
 const MENU_TOGGLE_ID = "admin-mobile-menu-toggle";
 
-export function AdminMobileNav({ hideEquipo = false }: { hideEquipo?: boolean }) {
+export function AdminMobileNav({
+  hideEquipo = false,
+  referralScope = null,
+}: {
+  hideEquipo?: boolean;
+  referralScope?: string | null;
+}) {
   const pathname = usePathname();
   const menuRef = useRef<HTMLInputElement>(null);
   const navGroups = navGroupsForAdminScope(hideEquipo);
@@ -171,7 +178,10 @@ export function AdminMobileNav({ hideEquipo = false }: { hideEquipo?: boolean })
             </nav>
           </ScrollArea>
           <Separator />
-          <div className="p-3 safe-area-bottom">
+          <div className="flex flex-col gap-3 p-3 safe-area-bottom">
+            {referralScope ? (
+              <ScopedReferralLink referralScope={referralScope} />
+            ) : null}
             <form action={logoutAdminAction}>
               <Button
                 type="submit"

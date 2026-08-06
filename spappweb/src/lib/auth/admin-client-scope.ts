@@ -1,16 +1,26 @@
 /**
  * Admins con vista de clientes limitada a un referral_source.
  *
- * Opinilla (Olga): clientes ?ref=olga hasta entrega + solicitudes pendientes Guillen.
+ * Cada captador (Olga, Neisalinas, …) solo ve clientes de su ?ref= hasta entrega.
+ * Opinilla además ve solicitudes pendientes Guillen.
  * Después de entregada/saldada ya no los ve (mora/recoger queda para admin pleno).
  * Inventario/tienda/garaje siguen completos. adminBogota ve todo de principio a fin.
  */
 const ADMIN_CLIENT_REFERRAL_SCOPE: Record<number, string> = {
   174: "olga", // Opinilla
+  184: "neisalinas",
+  185: "sebastianbateca",
+  186: "amormio",
+  187: "mauricio",
 };
 
 const ADMIN_CLIENT_REFERRAL_SCOPE_BY_USER: Record<string, string> = {
   opinilla: "olga",
+  neisalinas: "neisalinas",
+  "sebastiánbateca": "sebastianbateca",
+  sebastianbateca: "sebastianbateca",
+  amormio: "amormio",
+  mauricio: "mauricio",
 };
 
 /** Colas post-entrega que un admin scoped no ve. */
