@@ -28,16 +28,16 @@ assert.ok(!(SCOPED_ADMIN_HIDDEN_QUEUES as readonly string[]).includes("clientes_
 assert.equal(
   resolveAdminClientReferralScope({
     isLoggedIn: true,
-    userId: 174,
-    username: "Opinilla",
+    userId: 176,
+    username: "opinilla",
   }),
   "olga",
 );
 for (const [userId, username, scope] of [
-  [184, "Neisalinas", "neisalinas"],
-  [185, "Sebastiánbateca", "sebastianbateca"],
-  [186, "amormio", "amormio"],
-  [187, "Mauricio", "mauricio"],
+  [177, "neisalinas", "neisalinas"],
+  [178, "sebastianbateca", "sebastianbateca"],
+  [179, "amormio", "amormio"],
+  [180, "mauricio", "mauricio"],
 ] as const) {
   assert.equal(
     resolveAdminClientReferralScope({
