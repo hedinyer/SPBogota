@@ -568,17 +568,13 @@ function buildPagosHistorial(
   });
 }
 
-/** user_ids con solicitud (pendiente/aceptada/rechazada) y sin ninguna visita. */
-async function clientUserIdsWithoutVisita(
+/** user_ids con solicitud (pendiente/aceptada/rechazada), excluye Guillen legado. */
+async function clientUserIdsForCreditosQueue(
   supabase: ReturnType<typeof createAdminClient>,
 ): Promise<number[]> {
-  const [{ data: docs }, { data: visitas }] = await Promise.all([
-    supabase
-      .from("users_documents")
-      .select("user_id, referral_source, created_at"),
-    supabase.from("visitas").select("user_id"),
-  ]);
-  const withVisita = new Set((visitas ?? []).map((v) => v.user_id as number));
+  const { data: docs } = await supabase
+    .from("users_documents")
+    .select("user_id, referral_source, created_at");
   const ids = new Set<number>();
   for (const d of docs ?? []) {
     if (
@@ -589,22 +585,21 @@ async function clientUserIdsWithoutVisita(
     ) {
       continue;
     }
-    const uid = d.user_id as number;
-    if (!withVisita.has(uid)) ids.add(uid);
+    ids.add(d.user_id as number);
   }
   return [...ids];
 }
 
-function sinVisitaSubtitle(
+function creditoSubtitle(
   estado: string,
   referralSource?: string | null,
 ): string {
   const base =
     estado === "aceptada"
-      ? "Crédito aprobado · sin visita"
+      ? "Crédito aprobado"
       : estado === "rechazada"
-        ? "Crédito rechazado · sin visita"
-        : "Solicitud pendiente · sin visita";
+        ? "Crédito rechazado"
+        : "Solicitud pendiente";
   const label = referralLabel(referralSource);
   return label ? `${base} · ${label}` : base;
 }
@@ -665,7 +660,7 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
     recoger,
     solicitudesTaller,
   ] = await Promise.all([
-    clientUserIdsWithoutVisita(supabase),
+    clientUserIdsForCreditosQueue(supabase),
     clientScope
       ? referralAllowedForScopedAdmin("guillen", clientScope)
         ? guillenPendingSolicitudUserIds(supabase).then((ids) => ({
@@ -764,7 +759,7 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
     {
       id: "creditos",
       label: "Revisar solicitudes",
-      description: "Clientes sin visita (pendiente, aprobado o rechazado)",
+      description: "Pendiente, aprobado o rechazado",
       count: creditosIds.length,
     },
     {
@@ -881,22 +876,15 @@ export async function getInboxListItems(
       if (clientScope) {
         docsQuery = docsQuery.eq("referral_source", clientScope);
       }
-      const [docsRes, visitasRes] = await Promise.all([
-        docsQuery,
-        supabase.from("visitas").select("user_id"),
-      ]);
+      const docsRes = await docsQuery;
 
       if (docsRes.error) throw new Error(docsRes.error.message);
-      if (visitasRes.error) throw new Error(visitasRes.error.message);
 
-      const withVisita = new Set(
-        (visitasRes.data ?? []).map((v) => v.user_id as number),
-      );
       const seen = new Set<number>();
       const items: InboxListItem[] = [];
       for (const row of docsRes.data ?? []) {
         const uid = row.user_id as number;
-        if (withVisita.has(uid) || seen.has(uid)) continue;
+        if (seen.has(uid)) continue;
         if (
           isSegregatedInboxReferral(
             row.referral_source as string | null,
@@ -931,7 +919,7 @@ export async function getInboxListItems(
           createdAt: row.created_at as string,
           estadoSolicitud: row.estado_solicitud as string,
           referralSource: (row.referral_source as string | null) ?? null,
-          subtitle: sinVisitaSubtitle(
+          subtitle: creditoSubtitle(
             row.estado_solicitud as string,
             row.referral_source as string | null,
           ),

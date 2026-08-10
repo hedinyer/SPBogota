@@ -144,10 +144,10 @@ export function InboxQueueList({ items, queueId }: InboxQueueListProps) {
             ? `No hay clientes que coincidan con "${search.trim()}".`
             : isCreditos
               ? creditoFiltro === "pendiente"
-                ? "No hay solicitudes pendientes sin visita."
+                ? "No hay solicitudes pendientes."
                 : creditoFiltro === "aceptada"
-                  ? "No hay clientes con crédito aprobado sin visita."
-                  : "No hay clientes con crédito rechazado sin visita."
+                  ? "No hay clientes con crédito aprobado."
+                  : "No hay clientes con crédito rechazado."
               : isClientesGuillen
                 ? "No hay clientes del link de Guillén."
                 : "No hay items en esta cola."}
