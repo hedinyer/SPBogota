@@ -164,6 +164,7 @@ export function patchContratoDataFromHoja(
     nombre_contratante: hoja.nombre_completo.trim(),
     cedula_contratante: hoja.numero_identificacion.trim(),
     tipo_documento_contratante: hoja.tipo_identificacion,
+    celular_contratante: hoja.celular.trim(),
     direccion_notificaciones: buildDireccionNotificaciones(hoja),
   };
 }

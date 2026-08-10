@@ -14,6 +14,7 @@ import {
 export interface ContractClientPrefill {
   nombre: string;
   cedula: string;
+  celular: string;
   direccion: string;
   departamento: string;
   ciudad: string;
@@ -54,6 +55,7 @@ export function prefillFromHojaYContrato(
     cedula: String(
       contratoData?.cedula_contratante ?? hoja.numero_identificacion,
     ).trim(),
+    celular: String(contratoData?.celular_contratante ?? hoja.celular).trim(),
     direccion: dirStored || buildDireccionNotificaciones(hoja),
     departamento,
     ciudad,

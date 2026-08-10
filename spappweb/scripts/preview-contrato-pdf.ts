@@ -43,6 +43,7 @@ async function main() {
       nombreContratante: "JUAN CARLOS EJEMPLO",
       cedulaContratante: "1.234.567.890",
       tipoDocumentoContratante: "C.C.",
+      celularContratante: "3001234567",
       direccionNotificaciones: "Calle 45 #12-34, barrio Centro",
       ciudadContratante: "Bucaramanga",
       departamentoContratante: "Santander",

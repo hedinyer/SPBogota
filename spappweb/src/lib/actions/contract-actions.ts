@@ -72,6 +72,7 @@ export async function signContract(input: z.infer<typeof signSchema>) {
 
   const fecha = colombiaDateParts();
   const hojaRaw = (contract.hoja_vida_data as Record<string, unknown>) ?? {};
+  const celularHoja = String(hojaRaw.celular ?? "").trim();
   const tipoDoc = documentoAbreviatura(
     hojaRaw.tipo_identificacion as string | null | undefined,
   );
@@ -79,6 +80,7 @@ export async function signContract(input: z.infer<typeof signSchema>) {
     nombreContratante: parsed.nombre,
     cedulaContratante: parsed.cedula,
     tipoDocumentoContratante: tipoDoc,
+    celularContratante: celularHoja,
     direccionNotificaciones: parsed.direccion,
     ciudadContratante: parsed.ciudad,
     departamentoContratante: parsed.departamento,
@@ -152,6 +154,7 @@ export async function signContract(input: z.infer<typeof signSchema>) {
         nombre_contratante: parsed.nombre,
         cedula_contratante: parsed.cedula,
         tipo_documento_contratante: hojaRaw.tipo_identificacion ?? "cc",
+        celular_contratante: celularHoja,
         direccion_notificaciones: parsed.direccion,
         ciudad_contratante: parsed.ciudad,
         departamento_contratante: parsed.departamento,

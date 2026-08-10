@@ -327,6 +327,9 @@ export async function generateContratoPdf(args: {
             lines={[
               contrato.nombreContratante,
               `${contrato.tipoDocumentoContratante || "C.C."} ${contrato.cedulaContratante}`,
+              ...(contrato.celularContratante.trim()
+                ? [`Celular: ${contrato.celularContratante.trim()}`]
+                : []),
             ]}
           />
         </View>

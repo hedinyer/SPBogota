@@ -32,6 +32,7 @@ export interface ContratoData {
   cedulaContratante: string;
   /** Abreviatura del doc del contratante en firma (PPT, C.C., …). */
   tipoDocumentoContratante: string;
+  celularContratante: string;
   direccionNotificaciones: string;
   ciudadContratante: string;
   departamentoContratante: string;
@@ -115,6 +116,7 @@ export function buildContratoComercial(compra: CompraContratoInput): Omit<
   | "nombreContratante"
   | "cedulaContratante"
   | "tipoDocumentoContratante"
+  | "celularContratante"
   | "direccionNotificaciones"
   | "ciudadContratante"
   | "departamentoContratante"
@@ -194,6 +196,7 @@ export function buildContratoDataFromStored(
     nombreContratante: String(stored.nombre_contratante ?? ""),
     cedulaContratante: String(stored.cedula_contratante ?? ""),
     tipoDocumentoContratante,
+    celularContratante: String(stored.celular_contratante ?? ""),
     direccionNotificaciones: String(stored.direccion_notificaciones ?? ""),
     ciudadContratante: String(stored.ciudad_contratante ?? ""),
     departamentoContratante: String(stored.departamento_contratante ?? ""),
@@ -485,6 +488,7 @@ export function contratoClausulasSelfCheck(): void {
     nombreContratante: "JUAN PEREZ",
     cedulaContratante: "1.000.000",
     tipoDocumentoContratante: "C.C.",
+    celularContratante: "3001234567",
     direccionNotificaciones: "Calle 1",
     ciudadContratante: "Bucaramanga",
     departamentoContratante: "Santander",
@@ -515,6 +519,7 @@ export function contratoClausulasSelfCheck(): void {
     nombre_contratante: "Ana Lopez",
     cedula_contratante: "123",
     tipo_documento_contratante: "ppt",
+    celular_contratante: "3011112233",
     direccion_notificaciones: "Calle 1, barrio Centro",
     ciudad_contratante: "Bucaramanga",
     departamento_contratante: "Santander",
@@ -531,6 +536,9 @@ export function contratoClausulasSelfCheck(): void {
   });
   if (rebuilt.nombreContratante !== "Ana Lopez" || rebuilt.placa !== "ABC123") {
     throw new Error("buildContratoDataFromStored");
+  }
+  if (rebuilt.celularContratante !== "3011112233") {
+    throw new Error("buildContratoDataFromStored celular");
   }
   if (rebuilt.tipoDocumentoContratante !== "PPT") {
     throw new Error("buildContratoDataFromStored tipo PPT");
