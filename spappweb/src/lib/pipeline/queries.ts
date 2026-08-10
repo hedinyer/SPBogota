@@ -102,7 +102,7 @@ async function loadScopedClientUserIds(
   return ids;
 }
 
-/** Guillen sin visita = solicitudes pendientes (para Opinilla). */
+/** Guillen sin visita = solicitudes pendientes (captadores scoped + admin pleno). */
 async function guillenPendingSolicitudUserIds(
   supabase: ReturnType<typeof createAdminClient>,
 ): Promise<number[]> {
@@ -2203,8 +2203,13 @@ export async function listClientesMotoCredito(
   const supabase = createAdminClient();
   const clientScope = await getAdminClientReferralScope();
   const onlyGuillen = options?.onlyGuillen === true;
-  if (clientScope && onlyGuillen) return [];
-
+  if (
+    onlyGuillen &&
+    clientScope &&
+    !referralAllowedForScopedAdmin("guillen", clientScope)
+  ) {
+    return [];
+  }
   const { data: compras, error } = await supabase
     .from("user_moto_compra")
     .select(
@@ -2341,10 +2346,14 @@ export async function listClientesMotoCredito(
     const doc = docs[0] ?? null;
     const rawReferral =
       docs.find((d) => d.referral_source)?.referral_source ?? null;
-    if (!referralMatchesAdminScope(rawReferral, clientScope)) return [];
     const isGuillen = isHiddenReferral(rawReferral);
-    if (onlyGuillen ? !isGuillen : isGuillen) return [];
-    const bikeRaw = compra.bike_table;
+    if (onlyGuillen) {
+      if (!isGuillen) return [];
+      if (!referralAllowedForScopedAdmin("guillen", clientScope)) return [];
+    } else {
+      if (isGuillen) return [];
+      if (!referralMatchesAdminScope(rawReferral, clientScope)) return [];
+    }    const bikeRaw = compra.bike_table;
     const bike = Array.isArray(bikeRaw) ? bikeRaw[0] : bikeRaw;
 
     const contractsRaw = user.digital_contracts;

@@ -2,7 +2,7 @@
  * Admins con vista de clientes limitada a un referral_source.
  *
  * Cada captador (Olga, Neisalinas, …) solo ve clientes de su ?ref= hasta entrega.
- * Opinilla además ve solicitudes pendientes Guillen.
+ * Todos ellos además ven y gestionan solicitudes/clientes Guillen.
  * Después de entregada/saldada ya no los ve (mora/recoger queda para admin pleno).
  * Inventario/tienda/garaje siguen completos. adminBogota ve todo de principio a fin.
  */
@@ -26,10 +26,12 @@ const ADMIN_CLIENT_REFERRAL_SCOPE_BY_USER: Record<string, string> = {
 /** Colas post-entrega que un admin scoped no ve. */
 export const SCOPED_ADMIN_HIDDEN_QUEUES = ["morosos", "recoger"] as const;
 
-/** Referrals extras que el admin scoped puede abrir (además de su scope). */
-export const SCOPED_ADMIN_EXTRA_REFERRALS: Record<string, readonly string[]> = {
-  olga: ["guillen"],
-};
+/** Extras compartidos por todo captador scoped (además de su ?ref=). */
+export const SCOPED_ADMIN_SHARED_EXTRAS = ["guillen"] as const;
+
+/** Referrals extras por scope (además de SCOPED_ADMIN_SHARED_EXTRAS). */
+export const SCOPED_ADMIN_EXTRA_REFERRALS: Record<string, readonly string[]> =
+  {};
 
 export const SCOPED_ADMIN_POST_DELIVERY_ESTADOS = [
   "entregada",
@@ -44,7 +46,7 @@ export function referralMatchesAdminScope(
   return (referralSource ?? "").trim().toLowerCase() === scope;
 }
 
-/** Olga/listas: solo su slug. Perfil: también extras (p. ej. Guillen). */
+/** Scope propio + extras compartidos (Guillen) + extras por captador. */
 export function referralAllowedForScopedAdmin(
   referralSource: string | null | undefined,
   scope: string | null,
@@ -52,6 +54,9 @@ export function referralAllowedForScopedAdmin(
   if (!scope) return true;
   const slug = (referralSource ?? "").trim().toLowerCase();
   if (slug === scope) return true;
+  if ((SCOPED_ADMIN_SHARED_EXTRAS as readonly string[]).includes(slug)) {
+    return true;
+  }
   return (SCOPED_ADMIN_EXTRA_REFERRALS[scope] ?? []).includes(slug);
 }
 

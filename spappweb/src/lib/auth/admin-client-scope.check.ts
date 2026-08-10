@@ -13,7 +13,10 @@ assert.equal(referralMatchesAdminScope("fabian", "olga"), false);
 assert.equal(referralMatchesAdminScope("guillen", "olga"), false);
 assert.equal(referralAllowedForScopedAdmin("guillen", "olga"), true);
 assert.equal(referralAllowedForScopedAdmin("fabian", "olga"), false);
-assert.equal(referralAllowedForScopedAdmin("guillen", "neisalinas"), false);
+assert.equal(referralAllowedForScopedAdmin("guillen", "neisalinas"), true);
+assert.equal(referralAllowedForScopedAdmin("guillen", "sebastianbateca"), true);
+assert.equal(referralAllowedForScopedAdmin("guillen", "amormio"), true);
+assert.equal(referralAllowedForScopedAdmin("guillen", "mauricio"), true);
 assert.equal(referralAllowedForScopedAdmin("neisalinas", "neisalinas"), true);
 
 assert.equal(isPostDeliveryCompraEstado("entregada"), true);
