@@ -9,6 +9,7 @@ export const REFERRAL_SOURCES = [
   { slug: "sebastianbateca", label: "Sebastián" },
   { slug: "amormio", label: "Amormio" },
   { slug: "mauricio", label: "Mauricio" },
+  { slug: "call-center", label: "Call center" },
 ] as const;
 
 export type ReferralSlug = (typeof REFERRAL_SOURCES)[number]["slug"];
