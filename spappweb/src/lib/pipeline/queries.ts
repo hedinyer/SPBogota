@@ -568,15 +568,14 @@ function buildPagosHistorial(
   });
 }
 
-/** user_ids con solicitud pendiente (users_documents) y sin ninguna visita. */
+/** user_ids con solicitud (pendiente/aceptada/rechazada) y sin ninguna visita. */
 async function clientUserIdsWithoutVisita(
   supabase: ReturnType<typeof createAdminClient>,
 ): Promise<number[]> {
   const [{ data: docs }, { data: visitas }] = await Promise.all([
     supabase
       .from("users_documents")
-      .select("user_id, referral_source, created_at")
-      .eq("estado_solicitud", "pendiente"),
+      .select("user_id, referral_source, created_at"),
     supabase.from("visitas").select("user_id"),
   ]);
   const withVisita = new Set((visitas ?? []).map((v) => v.user_id as number));
@@ -765,7 +764,7 @@ export async function getInboxQueues(): Promise<InboxQueue[]> {
     {
       id: "creditos",
       label: "Revisar solicitudes",
-      description: "Solicitudes pendientes sin visita",
+      description: "Clientes sin visita (pendiente, aprobado o rechazado)",
       count: creditosIds.length,
     },
     {
@@ -878,7 +877,6 @@ export async function getInboxListItems(
         .select(
           "user_id, estado_solicitud, created_at, selfie_url, referral_source, users(id, user), digital_contracts(hoja_vida_data)",
         )
-        .eq("estado_solicitud", "pendiente")
         .order("created_at", { ascending: false });
       if (clientScope) {
         docsQuery = docsQuery.eq("referral_source", clientScope);
