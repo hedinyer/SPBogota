@@ -7,11 +7,11 @@
  * Inventario/tienda/garaje siguen completos. adminBogota ve todo de principio a fin.
  */
 const ADMIN_CLIENT_REFERRAL_SCOPE: Record<number, string> = {
-  176: "olga", // opinilla
-  177: "neisalinas",
-  178: "sebastianbateca",
-  179: "amormio",
-  180: "mauricio",
+  174: "olga", // Opinilla
+  184: "neisalinas",
+  185: "sebastianbateca",
+  186: "amormio",
+  187: "mauricio",
 };
 
 const ADMIN_CLIENT_REFERRAL_SCOPE_BY_USER: Record<string, string> = {

@@ -19,9 +19,12 @@ function normalizeVisitadorUser(result: unknown): VerifiedVisitadorUser | null {
   const visitadorId = Number(row.visitador_id);
   if (!visitadorId) return null;
 
+  const username = String(row.username ?? row.user ?? "");
+  if (!username) return null;
+
   return {
     id: Number(row.id),
-    user: String(row.user),
+    user: username,
     status: String(row.status),
     visitador_id: visitadorId,
   };
