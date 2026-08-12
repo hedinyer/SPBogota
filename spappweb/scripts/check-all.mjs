@@ -12,6 +12,7 @@ const checks = [
   "src/lib/admin/titularidad.check.ts",
   "src/lib/garaje/stock-segunda.check.ts",
   "src/lib/payments/primer-pago-progress.check.ts",
+  "src/lib/persianas/checkin.check.ts",
 ];
 
 function run(file) {
