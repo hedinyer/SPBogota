@@ -16,10 +16,10 @@ const SYSTEMTRACK_BASE_URL =
 const SYSTEMTRACK_EMAIL =
   process.env.SYSTEMTRACK_EMAIL?.trim() || "marisolpinilla@hotmail.com";
 const SYSTEMTRACK_PASSWORD =
-  process.env.SYSTEMTRACK_PASSWORD?.trim() || "123456";
+  process.env.SYSTEMTRACK_PASSWORD?.trim() || "098765";
 const SYSTEMTRACK_USER_API_HASH_FALLBACK =
   process.env.SYSTEMTRACK_USER_API_HASH?.trim() ||
-  "$2y$10$OCkjP58xbNyEeR8MYK4evePR/l2sVfPI.Qj/W2prKGWxG35OnxIve";
+  "$2y$10$WI01IqH.ZfscywOjwOcb3.hWsLw0WbYrctIsJ2Fca8Qb5uTaJbCM6";
 
 const CACHE_TTL_MS = 45_000;
 /** Sin caché en vivo: cada poll pide datos frescos a GPSWOX. */

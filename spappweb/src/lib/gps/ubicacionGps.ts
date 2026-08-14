@@ -1,10 +1,10 @@
-export type ProveedorGps = "system_track" | "iopgps";
+export type ProveedorGps = "dstrack" | "iopgps" | "system_track";
 
 export type AccionMotorGps = "bloquear" | "desbloquear";
 
 export type UbicacionGpsMoto = {
   proveedor: ProveedorGps;
-  /** ID numérico (System Track) o derivado del IMEI (IOP). */
+  /** ID numérico (DS Track / System Track) o derivado del IMEI (IOP). */
   deviceId: number;
   imei: string;
   lat: number;
@@ -22,15 +22,19 @@ export type UbicacionGpsMoto = {
 
 export function resolverProveedorGps(raw: string | null | undefined): ProveedorGps {
   const s = String(raw ?? "").trim().toLowerCase();
+  if (s.includes("iop")) return "iopgps";
+  if (s.includes("ds")) return "dstrack";
   if (s.includes("system")) return "system_track";
   return "iopgps";
 }
 
 export function etiquetaProveedorGps(proveedor: ProveedorGps): string {
-  return proveedor === "iopgps" ? "IOP GPS" : "System Track";
+  if (proveedor === "iopgps") return "IOP GPS";
+  if (proveedor === "dstrack") return "DS Track";
+  return "System Track";
 }
 
-/** Intervalo de consulta en vivo (ms). System Track suele refrescar más rápido que IOP. */
+/** Intervalo de consulta en vivo (ms). */
 export function intervaloPollGpsEnVivo(proveedor: ProveedorGps): number {
   return proveedor === "iopgps" ? 3000 : 2000;
 }
