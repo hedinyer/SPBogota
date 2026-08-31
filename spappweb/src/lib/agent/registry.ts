@@ -286,7 +286,7 @@ export const AGENT_TOOLS = {
               r.referencia,
               r.chasis,
               String(r.user_id),
-              r.users?.user,
+              Array.isArray(r.users) ? r.users[0]?.user : r.users?.user,
             ]
               .filter(Boolean)
               .some((v) => String(v).toLowerCase().includes(q)),
