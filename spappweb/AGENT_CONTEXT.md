@@ -152,11 +152,13 @@ Detalle: [`integrations/hermes/PIPELINE_EVENTS.md`](integrations/hermes/PIPELINE
 | `bike-images` | Imágenes del catálogo | — |
 | `inventario-imagenes` | Imágenes de repuestos | — |
 | `garaje-imagenes` | Fotos de placa/motos del garaje | — |
+| `agente-adjuntos` | Imágenes/PDF/docs del chat `/agente` | `{ts}-{nombre}` |
 
 URL pública: `{SUPABASE_URL}/storage/v1/object/public/{bucket}/{path}`.
 
-> El agente IA no sube archivos binarios por estas tools; trabaja con URLs ya
-> subidas (p. ej. en `submit_public_application`).
+> Las tools no suben binarios; trabajan con URLs ya subidas. El chat `/agente`
+> sí sube adjuntos a `agente-adjuntos` y se los manda a Hermes (imágenes como
+> `image_url`, el resto como URL para descargar).
 
 ---
 
@@ -300,7 +302,7 @@ Navegación admin en **5 hubs** (mismas URLs de datos):
 | --- | --- |
 | **Hoy** | `/inbox` (9 colas); taller → `/solicitudes` |
 | **Clientes** | `/clientes`, `/clientes/[userId]`; alta en `/clientes?nuevo=1` (`/crear-cliente` redirige) |
-| **Motos** | `/garaje`, `/garaje/nueva`, `/vendidas` (en calle), `/catalogo` (modelos), `/venta-contado` |
+| **Motos** | `/garaje` (patio, vendidas, modelos), `/garaje/nueva`, `/venta-contado`, `/vendidas` (Con clientes), `/tarjetas-propiedad` (Licencias). `/catalogo` y `/motos-vendidas` redirigen a `/garaje`. |
 | **Tienda** | `/venta` (repuestos y accesorios), `/caja`, `/inventario` (stock), `/productos-credito` (extras a crédito), `/historial-ventas` |
 | **Equipo** | `/visitadores` |
 
@@ -330,7 +332,7 @@ La bandeja `/inbox` tiene 9 colas: `creditos`, `pagos`, `retiro`, `entrega`,
 | `list_categorias` / `list_productos` | — | Inventario |
 | `list_solicitudes_taller` | — | Solicitudes de taller |
 | `list_visitadores` / `list_active_visitadores` | — | Visitadores |
-| `list_garaje_parqueaderos` / `list_garaje_motos` / `list_vendidas` | — | Garaje y vendidas |
+| `list_garaje_parqueaderos` / `list_garaje_motos` / `list_garaje_vendidas` / `list_vendidas` | — | Garaje, vendidas del patio y Con clientes |
 
 ### Crédito
 `approve_credit {documentId,userId}` · `reject_credit {documentId,userId,motivo,betado}`

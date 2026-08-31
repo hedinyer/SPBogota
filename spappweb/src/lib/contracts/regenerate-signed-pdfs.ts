@@ -65,6 +65,7 @@ export async function regenerateSignedContractPdfs(
         cuotaInicial: contrato.cuotaInicial,
         valorCuota: contrato.valorCuota,
         frecuenciaPago: contrato.frecuenciaPago,
+        estado: contrato.estado,
       },
     }),
     generateContratoPdf({

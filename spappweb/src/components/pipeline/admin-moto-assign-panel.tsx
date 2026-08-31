@@ -23,6 +23,7 @@ interface AdminMotoAssignPanelProps {
   bikes: BikeRow[];
   userId: number;
   documentId: number;
+  onDone?: () => void;
 }
 
 const FRECUENCIAS: FrecuenciaPago[] = [
@@ -37,6 +38,7 @@ export function AdminMotoAssignPanel({
   bikes,
   userId,
   documentId,
+  onDone,
 }: AdminMotoAssignPanelProps) {
   const [pending, startTransition] = useTransition();
   const [bikeId, setBikeId] = useState(
@@ -138,6 +140,7 @@ export function AdminMotoAssignPanel({
                   montoVisita: parsedVisita,
                 });
                 toast.success("Moto asignada. Envía el link de contrato al cliente.");
+                onDone?.();
               } catch (err) {
                 toast.error(
                   err instanceof Error ? err.message : "Error al guardar.",

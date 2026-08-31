@@ -56,6 +56,8 @@ export interface ContratoData {
   mediosPago: string;
 }
 
+export type CondicionMotoContrato = "nueva" | "segunda_mano" | "recuperada";
+
 export interface CompraContratoInput {
   modelo: string;
   color: string;
@@ -65,6 +67,17 @@ export interface CompraContratoInput {
   frecuencia_pago: FrecuenciaPago;
   cuota_inicial_monto: number;
   monto_cuota_periodo: number;
+  /** Si segunda_mano/recuperada → ESTADO Usada en el PDF. */
+  condicion?: CondicionMotoContrato | null;
+}
+
+/** ESTADO del bien en contrato / hoja de vida. */
+export function estadoMotoContrato(
+  condicion?: CondicionMotoContrato | null,
+): "Nueva" | "Usada" {
+  return condicion === "segunda_mano" || condicion === "recuperada"
+    ? "Usada"
+    : "Nueva";
 }
 
 export interface Clausula {
@@ -137,7 +150,7 @@ export function buildContratoComercial(compra: CompraContratoInput): Omit<
     marca: EMPRESA_PROPIETARIA.marcaMoto,
     modelo: compra.modelo,
     linea: compra.modelo,
-    estado: "Nueva",
+    estado: estadoMotoContrato(compra.condicion),
     chasis: compra.chasis,
     motor: "N/A",
     placa: compra.placa,
@@ -180,6 +193,7 @@ export function buildContratoDataFromStored(
     monto_cuota_periodo: Number(
       compra?.monto_cuota_periodo ?? stored.valor_cuota ?? 0,
     ),
+    condicion: compra?.condicion ?? null,
   });
 
   const tipoRaw = String(stored.tipo_documento_contratante ?? "").toLowerCase();
@@ -207,7 +221,7 @@ export function buildContratoDataFromStored(
   };
 }
 
-export const introTemplate = `El día [DIA] del mes de [MES] de [ANIO], en la ciudad de Bucaramanga, Santander, entre los suscrito a saber, MARISOL PINILLA RUEDA, mayor de edad, vecina y domiciliada en la ciudad de Bucaramanga, identificada como aparece al pie de su firma, quien en adelante se denominará LA PROPIETARIA, y por otro [NOMBRE_CONTRATANTE], mayor de edad, vecino y domiciliado en Bucaramanga, quien se identifica como aparece al pie de su firma y en adelante se denominará quien en adelante será denominado "EL CONTRATANTE", acuerdan celebrar un "CONTRATO DE RENTING" regido por las siguientes cláusulas:`;
+export const introTemplate = `El día [DIA] del mes de [MES] de [ANIO], en la ciudad de Bogotá, D.C., entre los suscrito a saber, MARISOL PINILLA RUEDA, mayor de edad, vecina y domiciliada en la ciudad de Bucaramanga, identificada como aparece al pie de su firma, quien en adelante se denominará LA PROPIETARIA, y por otro [NOMBRE_CONTRATANTE], mayor de edad, vecino y domiciliado en [CIUDAD_CONTRATANTE], quien se identifica como aparece al pie de su firma y en adelante se denominará quien en adelante será denominado "EL CONTRATANTE", acuerdan celebrar un "CONTRATO DE RENTING" regido por las siguientes cláusulas:`;
 
 export const blocks: ClausulaBlock[] = [
   {
@@ -360,7 +374,7 @@ export function buildClausulaMantenimientoText(): string {
   return "Se informa al contratante que el primer cambio de aceite se realizará entre los 500 a 1000 kilómetros segundo, tercero, cuarto, quinto, sexto, octavo, noveno, decimo, onceavo y doceavo cambio de aceite se contará 1000 kilómetros más desde el ultimo cambio de aceite todos los aceites se deberá pagar hay mantenimientos preventivos adicionales, como mantenimiento preventivo, mantenimiento medio y mantenimiento general obligatorios para obtener la garantía que serán en la tercera, sexta y novena revisión el cual ese mantenimiento deberá ser pago, según las tarifas establecidas.";
 }
 
-export const firmaTemplate = `Para constancia se firma en Bucaramanga a los [DIA] (xx) día del mes de [MES] de dos mil [ANIO] ([ANIO_NUM]), por quienes en el intervinieron.
+export const firmaTemplate = `Para constancia se firma en Bogotá a los [DIA] (xx) día del mes de [MES] de dos mil [ANIO] ([ANIO_NUM]), por quienes en el intervinieron.
 
 LA PROPIETARIA
 MARISOL PINILLA RUEDA
@@ -490,8 +504,8 @@ export function contratoClausulasSelfCheck(): void {
     tipoDocumentoContratante: "C.C.",
     celularContratante: "3001234567",
     direccionNotificaciones: "Calle 1",
-    ciudadContratante: "Bucaramanga",
-    departamentoContratante: "Santander",
+    ciudadContratante: "Bogotá",
+    departamentoContratante: "Bogotá D.C.",
     fechaFirmaDia: "14",
     fechaFirmaMes: "julio",
     fechaFirmaAnio: "2026",
@@ -514,6 +528,30 @@ export function contratoClausulasSelfCheck(): void {
   if (!intro.includes("MARISOL PINILLA RUEDA") || !intro.includes("LA PROPIETARIA")) {
     throw new Error("renderIntro pinilla");
   }
+  if (!intro.includes("Bogotá, D.C.") || !intro.includes("domiciliado en Bogotá")) {
+    throw new Error("renderIntro ciudad Bogotá");
+  }
+  if (estadoMotoContrato("segunda_mano") !== "Usada") {
+    throw new Error("estadoMotoContrato usada");
+  }
+  if (estadoMotoContrato("nueva") !== "Nueva") {
+    throw new Error("estadoMotoContrato nueva");
+  }
+  if (
+    buildContratoComercial({
+      modelo: "X",
+      color: "Rojo",
+      placa: "ABC",
+      chasis: "1",
+      referencia: null,
+      frecuencia_pago: "diario",
+      cuota_inicial_monto: 1,
+      monto_cuota_periodo: 1,
+      condicion: "recuperada",
+    }).estado !== "Usada"
+  ) {
+    throw new Error("buildContratoComercial usada");
+  }
 
   const rebuilt = buildContratoDataFromStored({
     nombre_contratante: "Ana Lopez",
@@ -521,8 +559,8 @@ export function contratoClausulasSelfCheck(): void {
     tipo_documento_contratante: "ppt",
     celular_contratante: "3011112233",
     direccion_notificaciones: "Calle 1, barrio Centro",
-    ciudad_contratante: "Bucaramanga",
-    departamento_contratante: "Santander",
+    ciudad_contratante: "Bogotá",
+    departamento_contratante: "Bogotá D.C.",
     fecha_firma_dia: "4",
     fecha_firma_mes: "agosto",
     fecha_firma_anio: "2026",
@@ -549,5 +587,8 @@ export function contratoClausulasSelfCheck(): void {
   const firmaPpt = renderFirma({ ...rebuilt, tipoDocumentoContratante: "PPT" });
   if (!firmaPpt.includes("PPT 123")) {
     throw new Error("renderFirma PPT");
+  }
+  if (!firmaPpt.includes("se firma en Bogotá")) {
+    throw new Error("renderFirma ciudad Bogotá");
   }
 }

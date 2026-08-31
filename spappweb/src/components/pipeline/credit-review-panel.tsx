@@ -16,6 +16,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { HojaVidaSummary } from "@/components/pipeline/hoja-vida-summary";
 
 interface CreditReviewPanelProps {
   document: UserDocumentRow;
@@ -23,6 +24,12 @@ interface CreditReviewPanelProps {
   contractId?: string | null;
   clienteCelular?: string | null;
   contractSigned?: boolean;
+  /** Nombre para alts de fotos. */
+  clienteNombre?: string | null;
+  /** Datos de hoja de vida del contrato (si ya existen). */
+  hojaVidaData?: Record<string, unknown> | null;
+  /** Si se pasa, se llama en vez de recargar la página. */
+  onDone?: () => void;
 }
 
 type CreditApiResult =
@@ -54,11 +61,19 @@ export function CreditReviewPanel({
   contractId,
   clienteCelular,
   contractSigned,
+  clienteNombre,
+  hojaVidaData,
+  onDone,
 }: CreditReviewPanelProps) {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [motivo, setMotivo] = useState("");
   const [betado, setBetado] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  function finish() {
+    if (onDone) onDone();
+    else window.location.reload(); // ponytail: reload evita crash RSC post-action en Vercel
+  }
 
   function onApprove() {
     startTransition(async () => {
@@ -72,8 +87,7 @@ export function CreditReviewPanel({
         return;
       }
       toast.success("Crédito aprobado. Asigna moto y placa.");
-      // ponytail: reload evita crash RSC post-action en Vercel
-      window.location.reload();
+      finish();
     });
   }
 
@@ -92,7 +106,7 @@ export function CreditReviewPanel({
       }
       toast.success("Solicitud rechazada.");
       setRejectOpen(false);
-      window.location.reload();
+      finish();
     });
   }
 
@@ -103,6 +117,8 @@ export function CreditReviewPanel({
         contractId={contractId}
         clienteCelular={clienteCelular}
         contractSigned={contractSigned}
+        clienteNombre={clienteNombre}
+        hojaVidaData={hojaVidaData}
       />
     );
   }
@@ -110,17 +126,18 @@ export function CreditReviewPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Revisar solicitud de crédito</CardTitle>
+        <CardTitle className="text-balance">Revisar solicitud de crédito</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Verifica las fotos del documento y la selfie antes de decidir.
+          Lee la hoja de vida y verifica las fotos antes de decidir.
         </p>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
-        <PhotoGrid document={document} />
+        <HojaVidaSummary data={hojaVidaData} />
+        <PhotoGrid document={document} clienteNombre={clienteNombre} />
         <div className="flex flex-wrap gap-3">
           <Button
             size="lg"
-            className="bg-primary text-primary-foreground hover:bg-primary/80"
+            className="min-h-11 bg-primary text-primary-foreground hover:bg-primary/80"
             disabled={pending}
             onClick={onApprove}
           >
@@ -129,6 +146,7 @@ export function CreditReviewPanel({
           <Button
             size="lg"
             variant="outline"
+            className="min-h-11"
             disabled={pending}
             onClick={() => setRejectOpen(true)}
           >
@@ -184,11 +202,15 @@ export function CreditReviewPanel({
 
 function ReadonlyCredit({
   document,
+  clienteNombre,
+  hojaVidaData,
 }: {
   document: UserDocumentRow;
   contractId?: string | null;
   clienteCelular?: string | null;
   contractSigned?: boolean;
+  clienteNombre?: string | null;
+  hojaVidaData?: Record<string, unknown> | null;
 }) {
   return (
     <Card>
@@ -207,22 +229,42 @@ function ReadonlyCredit({
             Motivo: {document.motivo_rechazo}
           </p>
         )}
-        <PhotoGrid document={document} />
+        <HojaVidaSummary data={hojaVidaData} />
+        <PhotoGrid document={document} clienteNombre={clienteNombre} />
       </CardContent>
     </Card>
   );
 }
 
-function PhotoGrid({ document }: { document: UserDocumentRow }) {
+function PhotoGrid({
+  document,
+  clienteNombre,
+}: {
+  document: UserDocumentRow;
+  clienteNombre?: string | null;
+}) {
+  const who = clienteNombre?.trim() || "el cliente";
   const photos = [
-    { label: "Documento frontal", url: document.document_front_url },
-    { label: "Documento trasero", url: document.document_back_url },
-    { label: "Selfie", url: document.selfie_url },
+    {
+      label: "Cédula frente",
+      url: document.document_front_url,
+      alt: `Cédula frente de ${who}`,
+    },
+    {
+      label: "Cédula reverso",
+      url: document.document_back_url,
+      alt: `Cédula reverso de ${who}`,
+    },
+    {
+      label: "Selfie",
+      url: document.selfie_url,
+      alt: `Selfie de ${who}`,
+    },
   ];
 
   return (
     <div className="grid gap-4 sm:grid-cols-3">
-      {photos.map(({ label, url }) => (
+      {photos.map(({ label, url, alt }) => (
         <div key={label} className="flex flex-col gap-2">
           <p className="text-sm font-medium text-foreground">{label}</p>
           {url ? (
@@ -230,7 +272,7 @@ function PhotoGrid({ document }: { document: UserDocumentRow }) {
               <div className="relative aspect-[4/3] overflow-hidden rounded-lg border border-border bg-muted/50">
                 <Image
                   src={url}
-                  alt={label}
+                  alt={alt}
                   fill
                   className="object-cover"
                   unoptimized

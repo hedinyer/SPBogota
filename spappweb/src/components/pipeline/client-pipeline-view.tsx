@@ -20,6 +20,10 @@ interface ClientPipelineViewProps {
   visitadores: VisitadorRow[];
   bikes: BikeRow[];
   productosCredito: ProductoCreditoRow[];
+  /** Chat: solo stepper + paso del paso actual. */
+  compact?: boolean;
+  /** Tras mutar un paso (crédito/moto), refrescar datos sin reload. */
+  onStepDone?: () => void;
 }
 
 export function ClientPipelineView({
@@ -27,6 +31,8 @@ export function ClientPipelineView({
   visitadores,
   bikes,
   productosCredito,
+  compact = false,
+  onStepDone,
 }: ClientPipelineViewProps) {
   const { userId } = { userId: pipeline.user.id };
   const adminStep = pipeline.currentAdminStep;
@@ -48,6 +54,115 @@ export function ClientPipelineView({
   const legacyClientMoto =
     contractSigned && !pipeline.compra && contractId;
 
+  const actionColumn = (
+    <div className="flex flex-col gap-6">
+      {adminStep === "credito" && pipeline.document && (
+        <CreditReviewPanel
+          document={pipeline.document}
+          userId={userId}
+          contractId={contractId}
+          clienteCelular={clienteCelular}
+          contractSigned={contractSigned}
+          clienteNombre={pipeline.displayName}
+          hojaVidaData={pipeline.contract?.hoja_vida_data ?? null}
+          onDone={onStepDone}
+        />
+      )}
+      {adminStep === "moto" && documentId && (
+        <AdminMotoAssignPanel
+          compra={pipeline.compra}
+          bikes={bikes}
+          userId={userId}
+          documentId={documentId}
+          onDone={onStepDone}
+        />
+      )}
+      {showContractShare && (
+        <ContractSharePanel
+          contract={pipeline.contract!}
+          compra={pipeline.compra!}
+          userId={userId}
+          pagos={pipeline.pagos}
+          clienteCelular={clienteCelular}
+        />
+      )}
+      {legacyClientMoto && (
+        <MotoSelectionPanel
+          contract={pipeline.contract}
+          compra={pipeline.compra}
+          contractId={contractId}
+          clienteCelular={clienteCelular}
+          userId={userId}
+        />
+      )}
+      {adminStep === "pago" && (
+        <>
+          <CreditProductsPanel
+            compra={pipeline.compra}
+            items={pipeline.compraProductosCredito}
+            catalogo={productosCredito}
+            userId={userId}
+          />
+          <PaymentConfirmPanel
+            compra={pipeline.compra}
+            pagos={pipeline.pagos}
+            userId={userId}
+            referenciasUsadas={referenciasUsadas}
+            clienteNombre={pipeline.displayName}
+            clienteCedula={pipeline.user.user}
+          />
+        </>
+      )}
+      {(adminStep === "entrega" ||
+        pipeline.compra?.estado === "entregada" ||
+        pipeline.compra?.estado === "saldada") && (
+        <DeliveryPanel
+          compra={pipeline.compra}
+          userId={userId}
+          clienteCelular={clienteCelular}
+          clienteNombre={pipeline.displayName}
+        />
+      )}
+      {adminStep === "visita" && (
+        <VisitActionPanel
+          visita={pipeline.visita}
+          visitadores={visitadores}
+          userId={userId}
+          compra={pipeline.compra}
+          referralSource={pipeline.document?.referral_source}
+        />
+      )}
+      {!compact && pipeline.compra?.estado === "entregada" && (
+        <RentingPanel pipeline={pipeline} userId={userId} />
+      )}
+
+      {!adminStep &&
+        pipeline.compra?.estado !== "entregada" &&
+        pipeline.compra?.estado !== "saldada" &&
+        !showContractShare &&
+        !legacyClientMoto && (
+        <div className="rounded-lg border border-border bg-muted/50 px-6 py-10 text-center text-sm text-muted-foreground">
+          No hay acciones pendientes de tu parte. El cliente continúa en
+          la app.
+        </div>
+      )}
+    </div>
+  );
+
+  if (compact) {
+    return (
+      <div className="flex flex-col gap-4">
+        <ClientStepper steps={pipeline.steps} />
+        <FlowOrderPrompt
+          compra={pipeline.compra}
+          visita={pipeline.visita}
+          userId={userId}
+        />
+        {actionColumn}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-8">
       <ClientStepper steps={pipeline.steps} />
@@ -60,92 +175,7 @@ export function ClientPipelineView({
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
-          {adminStep === "credito" && pipeline.document && (
-            <CreditReviewPanel
-              document={pipeline.document}
-              userId={userId}
-              contractId={contractId}
-              clienteCelular={clienteCelular}
-              contractSigned={contractSigned}
-            />
-          )}
-          {adminStep === "moto" && documentId && (
-            <AdminMotoAssignPanel
-              compra={pipeline.compra}
-              bikes={bikes}
-              userId={userId}
-              documentId={documentId}
-            />
-          )}
-          {showContractShare && (
-            <ContractSharePanel
-              contract={pipeline.contract!}
-              compra={pipeline.compra!}
-              userId={userId}
-              pagos={pipeline.pagos}
-              clienteCelular={clienteCelular}
-            />
-          )}
-          {legacyClientMoto && (
-            <MotoSelectionPanel
-              contract={pipeline.contract}
-              compra={pipeline.compra}
-              contractId={contractId}
-              clienteCelular={clienteCelular}
-              userId={userId}
-            />
-          )}
-          {adminStep === "pago" && (
-            <>
-              <CreditProductsPanel
-                compra={pipeline.compra}
-                items={pipeline.compraProductosCredito}
-                catalogo={productosCredito}
-                userId={userId}
-              />
-              <PaymentConfirmPanel
-                compra={pipeline.compra}
-                pagos={pipeline.pagos}
-                userId={userId}
-                referenciasUsadas={referenciasUsadas}
-                clienteNombre={pipeline.displayName}
-                clienteCedula={pipeline.user.user}
-              />
-            </>
-          )}
-          {(adminStep === "entrega" ||
-            pipeline.compra?.estado === "entregada" ||
-            pipeline.compra?.estado === "saldada") && (
-            <DeliveryPanel
-              compra={pipeline.compra}
-              userId={userId}
-              clienteCelular={clienteCelular}
-              clienteNombre={pipeline.displayName}
-            />
-          )}
-          {adminStep === "visita" && (
-            <VisitActionPanel
-              visita={pipeline.visita}
-              visitadores={visitadores}
-              userId={userId}
-              compra={pipeline.compra}
-              referralSource={pipeline.document?.referral_source}
-            />
-          )}
-          {pipeline.compra?.estado === "entregada" && (
-            <RentingPanel pipeline={pipeline} userId={userId} />
-          )}
-
-          {!adminStep &&
-            pipeline.compra?.estado !== "entregada" &&
-            pipeline.compra?.estado !== "saldada" &&
-            !showContractShare &&
-            !legacyClientMoto && (
-            <div className="rounded-lg border border-border bg-muted/50 px-6 py-10 text-center text-sm text-muted-foreground">
-              No hay acciones pendientes de tu parte. El cliente continúa en
-              la app.
-            </div>
-          )}
+          {actionColumn}
 
           <details className="rounded-lg border border-border">
             <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
@@ -159,6 +189,8 @@ export function ClientPipelineView({
                   contractId={contractId}
                   clienteCelular={clienteCelular}
                   contractSigned={contractSigned}
+                  clienteNombre={pipeline.displayName}
+                  hojaVidaData={pipeline.contract?.hoja_vida_data ?? null}
                 />
               )}
               <ContractReadonlyPanel contract={pipeline.contract} />

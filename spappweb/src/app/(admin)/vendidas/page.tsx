@@ -1,6 +1,6 @@
 ﻿import { getAllVendidasMotos } from "@/lib/pipeline/queries";
 import { VendidasManager } from "@/components/vendidas/vendidas-manager";
-import { AdminHubSubnav } from "@/components/layout/admin-hub-subnav";
+import { AdminScopedHubSubnav } from "@/components/layout/admin-scoped-hub-subnav";
 import { PageHeader } from "@/components/layout/page-header";
 
 export default async function VendidasPage() {
@@ -8,10 +8,10 @@ export default async function VendidasPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <AdminHubSubnav hubId="motos" />
+      <AdminScopedHubSubnav hubId="motos" />
       <PageHeader
-        title="En calle"
-        description="Motos entregadas: estado físico, mora y acciones operativas."
+        title="Con clientes"
+        description="Motos de crédito que ya tiene el cliente: estado físico, mora y acciones."
       />
       <VendidasManager motos={motos} />
     </div>

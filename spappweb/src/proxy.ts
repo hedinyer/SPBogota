@@ -13,10 +13,12 @@ import {
 
 const adminProtectedPrefixes = [
   "/inbox",
+  "/agente",
   "/clientes",
   "/crear-cliente",
   "/visitadores",
   "/catalogo",
+  "/motos-vendidas",
   "/productos-credito",
   "/inventario",
   "/caja",
@@ -34,8 +36,33 @@ const visitadorProtectedPrefixes = [
   "/visitador/visitas",
 ];
 
+function isCabeceraDelLlanoHost(request: NextRequest): boolean {
+  const host = (request.headers.get("host") ?? "").split(":")[0].toLowerCase();
+  return (
+    host === "cabeceradelllano.vercel.app" || host.startsWith("cabeceradelllano-")
+  );
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Proyecto público cabeceradelllano: solo cotizador, no el panel de Bogotá.
+  if (isCabeceraDelLlanoHost(request)) {
+    if (
+      pathname.startsWith("/_next") ||
+      pathname === "/favicon.ico" ||
+      pathname === "/robots.txt" ||
+      pathname === "/cotizador-persianas" ||
+      pathname === "/persianas-instalador"
+    ) {
+      return NextResponse.next();
+    }
+    const url = request.nextUrl.clone();
+    url.pathname = "/cotizador-persianas";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
   const response = NextResponse.next();
 
   const needsAdminSession =
@@ -83,6 +110,16 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/hojadevida", request.url));
   }
 
+  if (pathname === "/motos-vendidas") {
+    return NextResponse.redirect(
+      new URL("/garaje?vista=vendidas", request.url),
+    );
+  }
+
+  if (pathname === "/catalogo") {
+    return NextResponse.redirect(new URL("/garaje?tab=modelos", request.url));
+  }
+
   if (pathname === "/") {
     return NextResponse.redirect(
       new URL(isAdminLoggedIn ? "/inbox" : "/login", request.url),
@@ -102,35 +139,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/",
-    "/login",
-    "/inbox/:path*",
-    "/clientes",
-    "/clientes/:path*",
-    "/crear-cliente",
-    "/visitadores/:path*",
-    "/catalogo/:path*",
-    "/productos-credito/:path*",
-    "/inventario/:path*",
-    "/caja",
-    "/caja/:path*",
-    "/venta",
-    "/venta/:path*",
-    "/venta-contado",
-    "/venta-contado/:path*",
-    "/garaje",
-    "/garaje/:path*",
-    "/vendidas",
-    "/vendidas/:path*",
-    "/tarjetas-propiedad",
-    "/tarjetas-propiedad/:path*",
-    "/historial-ventas",
-    "/historial-ventas/:path*",
-    "/solicitudes/:path*",
-    "/visitador/login",
-    "/visitador/mis-visitas",
-    "/visitador/mis-visitas/:path*",
-    "/visitador/visitas/:path*",
-    "/hojadevida/login",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

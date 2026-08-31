@@ -24,6 +24,14 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async rewrites() {
+    return [
+      {
+        source: "/cotizador-persianas",
+        destination: "/persianas-instalador",
+      },
+    ];
+  },
 };
 
 export default nextConfig;

@@ -14,6 +14,7 @@ import { canChooseFlowOrder } from "@/lib/pipeline/step-logic";
 import { MIN_CUOTA_INICIAL } from "@/lib/moto-payment";
 import { MONTO_VISITA_DEFAULT } from "@/lib/payments/visita-monto";
 import type { CompraContratoInput } from "@/lib/contracts/contrato-renting-clausulas";
+import { fetchGarajeCondicion } from "@/lib/contracts/garaje-condicion";
 import {
   hojaVidaFormSchema,
   hojaVidaFormToJson,
@@ -203,10 +204,17 @@ export async function updateContractHojaVida(
       const { data: compra } = await supabase
         .from("user_moto_compra")
         .select(
-          "modelo, color, placa, chasis, referencia, frecuencia_pago, cuota_inicial_monto, monto_cuota_periodo",
+          "modelo, color, placa, chasis, referencia, frecuencia_pago, cuota_inicial_monto, monto_cuota_periodo, garaje_moto_id",
         )
         .eq("user_id", parsed.userId)
         .maybeSingle();
+
+      const condicion = compra?.placa
+        ? await fetchGarajeCondicion(supabase, {
+            garajeMotoId: compra.garaje_moto_id as string | null,
+            placa: compra.placa as string,
+          })
+        : null;
 
       const compraInput: CompraContratoInput | null = compra?.placa
         ? {
@@ -218,6 +226,7 @@ export async function updateContractHojaVida(
             frecuencia_pago: compra.frecuencia_pago as FrecuenciaPago,
             cuota_inicial_monto: compra.cuota_inicial_monto as number,
             monto_cuota_periodo: compra.monto_cuota_periodo as number,
+            condicion,
           }
         : null;
 
@@ -469,6 +478,7 @@ export async function markDelivered(compraId: string, userId: number) {
 
   revalidateClient(userId);
   revalidatePath("/catalogo");
+  revalidatePath("/garaje");
   revalidatePath("/vendidas");
   return { ok: true };
 }
@@ -823,6 +833,7 @@ export async function saveBike(input: z.infer<typeof bikeSchema>) {
   }
 
   revalidatePath("/catalogo");
+  revalidatePath("/garaje");
   return { ok: true };
 }
 

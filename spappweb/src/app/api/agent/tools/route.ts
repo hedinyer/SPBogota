@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getAgentApiKey, isAgentAuthorized } from "@/lib/agent/auth";
 import { runAsAgent } from "@/lib/agent/agent-context";
+import { parseAgentToolScope } from "@/lib/agent/motos-tools";
 import { dispatchAgentTool, getAgentToolCatalog } from "@/lib/agent/registry";
 
 export const dynamic = "force-dynamic";
@@ -29,8 +30,16 @@ export async function GET(request: NextRequest) {
   if (denied) return denied;
 
   try {
-    const tools = getAgentToolCatalog();
-    return NextResponse.json({ ok: true, count: tools.length, tools });
+    const scope = parseAgentToolScope(
+      request.nextUrl.searchParams.get("scope"),
+    );
+    const tools = getAgentToolCatalog(scope);
+    return NextResponse.json({
+      ok: true,
+      scope,
+      count: tools.length,
+      tools,
+    });
   } catch (e) {
     return NextResponse.json(
       {
@@ -43,14 +52,18 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/** Ejecuta una herramienta: body `{ tool: string, args?: object }`. */
+/** Ejecuta una herramienta: body `{ tool: string, args?: object, scope?: "motos"|"full" }`. */
 export async function POST(request: NextRequest) {
   const denied = guard(request);
   if (denied) return denied;
 
-  let body: { tool?: string; args?: unknown };
+  let body: { tool?: string; args?: unknown; scope?: unknown };
   try {
-    body = (await request.json()) as { tool?: string; args?: unknown };
+    body = (await request.json()) as {
+      tool?: string;
+      args?: unknown;
+      scope?: unknown;
+    };
   } catch {
     return NextResponse.json(
       { ok: false, error: "Body JSON inválido." },
@@ -66,6 +79,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const result = await runAsAgent(() => dispatchAgentTool(toolName, body.args));
+  const scope = parseAgentToolScope(
+    body.scope ?? request.nextUrl.searchParams.get("scope"),
+  );
+
+  const result = await runAsAgent(() =>
+    dispatchAgentTool(toolName, body.args, scope),
+  );
   return NextResponse.json(result, { status: result.ok ? 200 : 400 });
 }

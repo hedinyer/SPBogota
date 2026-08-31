@@ -153,7 +153,7 @@ export function AdminMobileNav({
                       <Icon className="size-3.5" strokeWidth={1.75} />
                       {group.label}
                     </p>
-                    {group.children.map(({ href, label, icon: ChildIcon }) => {
+                    {group.children.map(({ href, label, icon: ChildIcon, hint }) => {
                       const active = isChildActive(pathname, href);
                       return (
                         <Link
@@ -167,8 +167,15 @@ export function AdminMobileNav({
                               : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
                           )}
                         >
-                          <ChildIcon className="size-4" strokeWidth={1.75} />
-                          {label}
+                          <ChildIcon className="size-4 shrink-0" strokeWidth={1.75} />
+                          <span className="min-w-0 flex flex-col">
+                            <span className="truncate">{label}</span>
+                            {hint ? (
+                              <span className="truncate text-xs font-normal text-muted-foreground">
+                                {hint}
+                              </span>
+                            ) : null}
+                          </span>
                         </Link>
                       );
                     })}

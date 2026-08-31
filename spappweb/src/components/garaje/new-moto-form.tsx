@@ -315,7 +315,7 @@ export function NewMotoForm({
             <p className="text-xs text-muted-foreground">
               Rellena modelo y color. Si el modelo no existe, créalo antes en{" "}
               <Link
-                href="/catalogo"
+                href="/garaje?tab=modelos"
                 className="font-medium text-foreground underline underline-offset-4"
               >
                 Modelos

@@ -1218,7 +1218,7 @@ export async function getInboxListItems(
             userId: row.user_id as number,
             ...client,
             motoImagenUrl: inboxBikeImage(compra?.bike_table),
-            subtitle: `Recoger ${compra?.modelo ?? "moto"} · ${row.dias_atraso} días · ${formatCop(row.monto_adeudado)}`,
+            subtitle: `Recoger ${compra?.modelo ?? "moto"} · ${row.dias_atraso} días · ${formatCop(row.monto_adeudado)} · ${compra?.placa ?? "sin placa"}`,
             queueId,
           };
         }),

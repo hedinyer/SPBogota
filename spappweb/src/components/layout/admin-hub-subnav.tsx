@@ -3,21 +3,27 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  adminNavGroups,
   isChildActive,
+  navGroupsForAdminScope,
   type AdminNavGroup,
 } from "@/components/layout/admin-nav-links";
 import { cn } from "@/lib/utils";
 
-export function AdminHubSubnav({ hubId }: { hubId: AdminNavGroup["id"] }) {
+export function AdminHubSubnav({
+  hubId,
+  hideEquipo = false,
+}: {
+  hubId: AdminNavGroup["id"];
+  hideEquipo?: boolean;
+}) {
   const pathname = usePathname();
-  const group = adminNavGroups.find((g) => g.id === hubId);
+  const group = navGroupsForAdminScope(hideEquipo).find((g) => g.id === hubId);
   if (!group || group.children.length === 0) return null;
 
   return (
     <nav
       aria-label={`${group.label}: secciones`}
-      className="flex w-full gap-1 overflow-x-auto rounded-xl bg-muted p-1"
+      className="flex w-full gap-1 overflow-x-auto rounded-xl bg-muted p-1 lg:hidden"
     >
       {group.children.map(({ href, label }) => {
         const active = isChildActive(pathname, href);

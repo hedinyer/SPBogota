@@ -32,7 +32,7 @@ export function MoraSummaryBanner({ pipeline }: { pipeline: ClientPipeline }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-medium">Cuenta de mora</p>
-          <p className="mt-1">
+          <p className="mt-1 tabular-nums">
             {dias > 0 ? `${dias} días de atraso · ` : ""}
             Adeudado {formatCop(monto)}
           </p>

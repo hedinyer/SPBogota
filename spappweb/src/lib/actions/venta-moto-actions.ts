@@ -142,6 +142,7 @@ export async function saveVentaMoto(input: VentaMotoInput): Promise<VentaMotoRow
   revalidatePath("/inbox");
   revalidatePath("/venta-contado");
   revalidatePath("/catalogo");
+  revalidatePath("/garaje");
   revalidatePath("/caja");
   return toRow(data as Record<string, unknown>);
 }

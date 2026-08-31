@@ -9,6 +9,7 @@ import {
   colombiaDateParts,
   type ContratoData,
 } from "@/lib/contracts/contrato-renting-clausulas";
+import { fetchGarajeCondicion } from "@/lib/contracts/garaje-condicion";
 import { documentoAbreviatura } from "@/lib/contracts/hoja-vida-schema";
 import type { FrecuenciaPago } from "@/lib/pipeline/types";
 import {
@@ -60,7 +61,7 @@ export async function signContract(input: z.infer<typeof signSchema>) {
   const { data: compra, error: compraError } = await supabase
     .from("user_moto_compra")
     .select(
-      "modelo, color, placa, chasis, referencia, frecuencia_pago, cuota_inicial_monto, monto_cuota_periodo",
+      "modelo, color, placa, chasis, referencia, frecuencia_pago, cuota_inicial_monto, monto_cuota_periodo, garaje_moto_id",
     )
     .eq("user_id", userId)
     .maybeSingle();
@@ -69,6 +70,11 @@ export async function signContract(input: z.infer<typeof signSchema>) {
   if (!compra?.placa?.trim() || !compra?.chasis?.trim()) {
     throw new Error("La moto aún no está asignada.");
   }
+
+  const condicion = await fetchGarajeCondicion(supabase, {
+    garajeMotoId: compra.garaje_moto_id as string | null,
+    placa: compra.placa as string,
+  });
 
   const fecha = colombiaDateParts();
   const hojaRaw = (contract.hoja_vida_data as Record<string, unknown>) ?? {};
@@ -96,6 +102,7 @@ export async function signContract(input: z.infer<typeof signSchema>) {
       frecuencia_pago: compra.frecuencia_pago as FrecuenciaPago,
       cuota_inicial_monto: compra.cuota_inicial_monto as number,
       monto_cuota_periodo: compra.monto_cuota_periodo as number,
+      condicion,
     }),
   };
 
@@ -117,6 +124,7 @@ export async function signContract(input: z.infer<typeof signSchema>) {
         cuotaInicial: contratoData.cuotaInicial,
         valorCuota: contratoData.valorCuota,
         frecuenciaPago: contratoData.frecuenciaPago,
+        estado: contratoData.estado,
       },
     }),
     generateContratoPdf({

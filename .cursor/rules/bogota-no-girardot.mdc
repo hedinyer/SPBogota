@@ -1,0 +1,19 @@
+---
+description: Esta app es Bogotá (Pinilla), nunca Girardot/Garrido. Datos y MCP siempre al proyecto Bogotá.
+alwaysApply: true
+---
+
+# Esta app es Bogotá, no Girardot
+
+Este repo (`SPBogota` / `spappweb`) es **solo Bogotá**. Inventario, motos, clientes, caja, SQL, MCP: **todo a Bogotá**. No a Girardot.
+
+| Sede | Proyecto | Ref |
+|---|---|---|
+| **Esta app** | Bogotá (Pinilla) | `ziihqvtjacqzwmcmpiyp` |
+| **Otra app** | Girardot (Garrido) | `iilgrapnrkwdcouielwz` |
+
+- URL: `https://ziihqvtjacqzwmcmpiyp.supabase.co`
+- MCP: `user-supabase-bogota`, o `plugin-supabase-supabase` con `project_id: ziihqvtjacqzwmcmpiyp`
+- **Nunca** `user-supabase` (apunta a Garrido). Nunca inserts/updates/deletes en `iilgrapnrkwdcouielwz`.
+
+Si hay que tocar Girardot, el usuario lo pide por nombre. Si no, Bogotá.

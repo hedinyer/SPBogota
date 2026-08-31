@@ -1,5 +1,6 @@
 import { AdminMobileNav } from "@/components/layout/admin-mobile-nav";
 import { AdminSidebar } from "@/components/layout/admin-sidebar";
+import { MotosAgentFab } from "@/components/agente/motos-agent-fab";
 import { getAdminClientReferralScope } from "@/lib/auth/admin-client-scope";
 
 export default async function AdminLayout({
@@ -25,6 +26,7 @@ export default async function AdminLayout({
           </div>
         </main>
       </div>
+      <MotosAgentFab hideEquipo={hideEquipo} />
     </div>
   );
 }

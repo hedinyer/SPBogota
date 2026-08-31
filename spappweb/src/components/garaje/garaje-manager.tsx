@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { toast } from "sonner";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
@@ -18,6 +18,7 @@ import type {
   GarajeMantenimientoItemRow,
   GarajeMotoEstado,
   GarajeMotoRow,
+  GarajeMotoVendidaRow,
   GarajeParqueaderoRow,
   InventarioProductoRow,
 } from "@/lib/pipeline/types";
@@ -30,6 +31,8 @@ import {
   GarajeMotoCicloPanel,
   plazoBadgeLabel,
 } from "@/components/garaje/garaje-moto-ciclo-panel";
+import { CatalogoManager } from "@/components/catalogo/catalogo-manager";
+import { MotosVendidasTable } from "@/components/vendidas/motos-vendidas-table";
 import { getStoragePublicUrl } from "@/lib/utils/storage-urls";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,6 +73,13 @@ import { STORAGE_BUCKETS } from "@/lib/supabase/storage-buckets";
 import { uploadImageFromBrowser } from "@/lib/utils/upload-image-client";
 import { Textarea } from "@/components/ui/textarea";
 import { TouchSelect } from "@/components/ui/touch-select";
+import {
+  GARAJE_VISTA_LABELS,
+  parseGarajeTab,
+  parseGarajeVista,
+  type GarajeTab,
+  type GarajeVista,
+} from "@/lib/garaje/garaje-url";
 import { cn } from "@/lib/utils";
 
 const actionBtnClass =
@@ -95,6 +105,9 @@ export function GarajeManager({
   productos = [],
   mantenimientoByMoto = {},
   initialFotoPendiente = false,
+  bikes = [],
+  stockSegunda = {},
+  motosVendidas = [],
 }: {
   parqueaderos: GarajeParqueaderoRow[];
   motos: GarajeMotoRow[];
@@ -102,8 +115,14 @@ export function GarajeManager({
   productos?: InventarioProductoRow[];
   mantenimientoByMoto?: Record<string, GarajeMantenimientoItemRow[]>;
   initialFotoPendiente?: boolean;
+  bikes?: BikeRow[];
+  stockSegunda?: Record<string, number>;
+  motosVendidas?: GarajeMotoVendidaRow[];
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeTab = parseGarajeTab(searchParams.get("tab"));
+  const vista = parseGarajeVista(searchParams.get("vista"));
   const [motoOpen, setMotoOpen] = useState(false);
   const [parqOpen, setParqOpen] = useState(false);
   const [editingMoto, setEditingMoto] = useState<GarajeMotoRow | null>(null);
@@ -116,6 +135,14 @@ export function GarajeManager({
   const [filtroFotoPendiente, setFiltroFotoPendiente] = useState(
     initialFotoPendiente,
   );
+
+  function syncGarajeUrl(tab: GarajeTab, nextVista: GarajeVista) {
+    const qs = new URLSearchParams();
+    if (tab !== "motos") qs.set("tab", tab);
+    if (tab === "motos" && nextVista !== "patio") qs.set("vista", nextVista);
+    const q = qs.toString();
+    router.replace(q ? `/garaje?${q}` : "/garaje", { scroll: false });
+  }
 
   function openMotoEditor(moto: GarajeMotoRow) {
     setEditingMoto(moto);
@@ -140,6 +167,7 @@ export function GarajeManager({
 
   const motosFiltradas = useMemo(() => {
     return motos.filter((m) => {
+      if (vista === "patio" && m.estado === "vendida") return false;
       if (filtroParqueadero !== "all") {
         if (filtroParqueadero === "none" && m.parqueadero_id != null) return false;
         if (
@@ -155,12 +183,17 @@ export function GarajeManager({
       if (filtroFotoPendiente && m.placa_foto_url) return false;
       return true;
     });
-  }, [motos, filtroParqueadero, filtroCondicion, filtroFotoPendiente]);
+  }, [motos, vista, filtroParqueadero, filtroCondicion, filtroFotoPendiente]);
 
   const pendientesFoto = motos.filter((m) => !m.placa_foto_url).length;
 
   return (
-    <Tabs defaultValue="motos">
+    <Tabs
+      value={activeTab}
+      onValueChange={(value) => {
+        syncGarajeUrl(value as GarajeTab, vista);
+      }}
+    >
       <TabsList className="h-auto w-full max-w-full gap-1 overflow-x-auto p-1">
         <TabsTrigger
           value="motos"
@@ -174,6 +207,12 @@ export function GarajeManager({
           )}
         </TabsTrigger>
         <TabsTrigger
+          value="modelos"
+          className="min-h-11 flex-1 touch-manipulation px-3 sm:min-h-8"
+        >
+          Modelos
+        </TabsTrigger>
+        <TabsTrigger
           value="parqueaderos"
           className="min-h-11 flex-1 touch-manipulation px-3 sm:min-h-8"
         >
@@ -182,6 +221,31 @@ export function GarajeManager({
       </TabsList>
 
       <TabsContent value="motos" className="flex flex-col gap-4">
+        <nav
+          aria-label="Vista de motos en garaje"
+          className="flex w-full gap-1 overflow-x-auto rounded-xl bg-muted p-1"
+        >
+          {(Object.keys(GARAJE_VISTA_LABELS) as GarajeVista[]).map((key) => (
+            <button
+              key={key}
+              type="button"
+              className={cn(
+                "min-h-11 shrink-0 touch-manipulation rounded-lg px-3 py-2 text-center text-sm font-medium transition-colors sm:flex-1",
+                vista === key
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => syncGarajeUrl("motos", key)}
+            >
+              {GARAJE_VISTA_LABELS[key]}
+            </button>
+          ))}
+        </nav>
+
+        {vista === "vendidas" ? (
+          <MotosVendidasTable motos={motosVendidas} />
+        ) : (
+          <>
         {stockNuevo.length > 0 ? (
           <section className="flex flex-col gap-3">
             <div>
@@ -338,7 +402,8 @@ export function GarajeManager({
                     >
                       Nueva moto
                     </Link>{" "}
-                    o marca una entregada como Recogida / En patio en En calle.
+                    o marca una entregada como Recogida / En patio en Con
+                    clientes.
                   </>
                 ) : (
                   "No hay motos con estos filtros."
@@ -614,6 +679,12 @@ export function GarajeManager({
             })}
         </div>
         ) : null}
+          </>
+        )}
+      </TabsContent>
+
+      <TabsContent value="modelos" className="flex flex-col gap-4">
+        <CatalogoManager bikes={bikes} stockSegunda={stockSegunda} />
       </TabsContent>
 
       <TabsContent value="parqueaderos" className="flex flex-col gap-4">

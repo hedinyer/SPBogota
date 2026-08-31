@@ -1,14 +1,14 @@
 import {
-  BadgeCheck,
   Banknote,
   Bike,
+  Bot,
   ClipboardList,
   CreditCard,
   History,
   IdCard,
   LogOut,
+  MapPin,
   Package,
-  ShoppingBag,
   ShoppingCart,
   Store,
   Warehouse,
@@ -21,6 +21,8 @@ export type AdminNavLink = {
   href: string;
   label: string;
   icon: LucideIcon;
+  /** Una línea: qué se hace en esa sección (tooltip / subtítulo móvil). */
+  hint?: string;
 };
 
 export type AdminNavGroup = {
@@ -28,7 +30,7 @@ export type AdminNavGroup = {
   label: string;
   href: string;
   icon: LucideIcon;
-  /** Sub-rutas del hub; vacío = link simple (Hoy, Clientes) */
+  /** Sub-rutas del hub; vacío = link simple (Hoy, Agente IA, Clientes) */
   children: AdminNavLink[];
 };
 
@@ -38,6 +40,13 @@ export const adminNavGroups: AdminNavGroup[] = [
     label: "Hoy",
     href: "/inbox",
     icon: ClipboardList,
+    children: [],
+  },
+  {
+    id: "agente",
+    label: "Agente IA",
+    href: "/agente",
+    icon: Bot,
     children: [],
   },
   {
@@ -51,15 +60,32 @@ export const adminNavGroups: AdminNavGroup[] = [
     id: "motos",
     label: "Motos",
     href: "/garaje",
-    icon: Warehouse,
+    icon: Bike,
     children: [
-      // ponytail: order = register → stock → sell → sold → street; Tarjetas out of that path
-      { href: "/catalogo", label: "Modelos", icon: Bike },
-      { href: "/garaje", label: "Garaje", icon: Warehouse },
-      { href: "/venta-contado", label: "Contado", icon: Banknote },
-      { href: "/motos-vendidas", label: "Vendidas", icon: BadgeCheck },
-      { href: "/vendidas", label: "En calle", icon: ShoppingBag },
-      { href: "/tarjetas-propiedad", label: "Tarjetas", icon: IdCard },
+      {
+        href: "/garaje",
+        label: "Garaje",
+        icon: Warehouse,
+        hint: "Patio, modelos y vendidas de aquí",
+      },
+      {
+        href: "/venta-contado",
+        label: "Venta de contado",
+        icon: Banknote,
+        hint: "Vender o cobrar en mostrador",
+      },
+      {
+        href: "/vendidas",
+        label: "Con clientes",
+        icon: MapPin,
+        hint: "Motos de crédito con el cliente",
+      },
+      {
+        href: "/tarjetas-propiedad",
+        label: "Licencias",
+        icon: IdCard,
+        hint: "Fotos de licencia por placa",
+      },
     ],
   },
   {
@@ -119,9 +145,7 @@ export function navGroupsForAdminScope(hideEquipo: boolean): AdminNavGroup[] {
       if (g.id !== "motos") return g;
       return {
         ...g,
-        children: g.children.filter(
-          (c) => c.href !== "/motos-vendidas" && c.href !== "/vendidas",
-        ),
+        children: g.children.filter((c) => c.href !== "/vendidas"),
       };
     });
 }

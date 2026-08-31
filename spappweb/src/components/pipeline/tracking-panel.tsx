@@ -25,6 +25,7 @@ interface TrackingPanelProps {
   moroso?: MorosoRow | null;
   recoger?: MotoParaRecogerRow | null;
   atraso?: AtrasoSnapshot | null;
+  onSeguimientoChange?: (seguimiento: boolean) => void;
 }
 
 function isLiveLocation(location: TrackingLocation | null | undefined) {
@@ -40,6 +41,7 @@ export function TrackingPanel({
   moroso,
   recoger,
   atraso,
+  onSeguimientoChange,
 }: TrackingPanelProps) {
   const [pending, startTransition] = useTransition();
   const [liveTracking, setLiveTracking] = useState(tracking);
@@ -95,10 +97,14 @@ export function TrackingPanel({
       <CardHeader>
         <div className="flex items-center justify-between gap-2">
           <CardTitle>Seguimiento GPS</CardTitle>
-          {liveNow && (
+          {liveNow ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-              <Radio className="h-3 w-3" />
+              <Radio aria-hidden className="h-3 w-3" />
               En vivo
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              Apagado
             </span>
           )}
         </div>
@@ -141,6 +147,7 @@ export function TrackingPanel({
                   setLiveTracking((prev) =>
                     prev ? { ...prev, seguimiento: v } : prev,
                   );
+                  onSeguimientoChange?.(v);
                   toast.success(
                     v
                       ? "Seguimiento intensivo activado en la app."
@@ -168,6 +175,7 @@ export function TrackingPanel({
                   setLiveTracking((prev) =>
                     prev ? { ...prev, seguimiento: true } : prev,
                   );
+                  onSeguimientoChange?.(true);
                   toast.success("Seguimiento intensivo activado.");
                 } catch (e) {
                   toast.error(

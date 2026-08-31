@@ -154,24 +154,22 @@ export function AdminSidebar({
 
             return (
               <div key={group.id} className="flex flex-col gap-1">
-                <Link
-                  href={group.href}
+                <p
                   className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2 text-xs font-medium tracking-wider uppercase transition-colors",
+                    "flex items-center gap-3 px-3 py-2 text-xs font-medium tracking-wider uppercase",
                     groupActive
                       ? "text-sidebar-foreground"
-                      : "text-muted-foreground hover:text-sidebar-foreground",
+                      : "text-muted-foreground",
                   )}
                 >
                   <Icon className="size-3.5 shrink-0" strokeWidth={1.75} />
                   <span className="truncate">{group.label}</span>
-                </Link>
+                </p>
                 <div className="ml-2 flex flex-col gap-0.5 border-l border-sidebar-border pl-2">
-                  {group.children.map(({ href, label, icon: ChildIcon }) => {
+                  {group.children.map(({ href, label, icon: ChildIcon, hint }) => {
                     const active = isChildActive(pathname, href);
-                    return (
+                    const link = (
                       <Link
-                        key={href}
                         href={href}
                         className={cn(
                           "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
@@ -186,6 +184,15 @@ export function AdminSidebar({
                         />
                         <span className="truncate">{label}</span>
                       </Link>
+                    );
+                    if (!hint) {
+                      return <div key={href}>{link}</div>;
+                    }
+                    return (
+                      <Tooltip key={href}>
+                        <TooltipTrigger asChild>{link}</TooltipTrigger>
+                        <TooltipContent side="right">{hint}</TooltipContent>
+                      </Tooltip>
                     );
                   })}
                 </div>

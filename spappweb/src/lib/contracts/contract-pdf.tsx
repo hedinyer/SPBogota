@@ -201,6 +201,8 @@ export async function generateHojaVidaPdf(args: {
     cuotaInicial: string;
     valorCuota: string;
     frecuenciaPago: string;
+    /** "Nueva" | "Usada" — marca el check de la hoja. */
+    estado?: string;
   };
 }): Promise<Buffer> {
   const form: HojaVidaFormData = parseHojaVidaForm(args.hoja);
@@ -212,6 +214,7 @@ export async function generateHojaVidaPdf(args: {
   const ref0 = form.referencias[0];
   const ref1 = form.referencias[1];
   const c = args.comercial;
+  const motoUsada = (c?.estado ?? "").toLowerCase() === "usada";
 
   const Line = ({ children }: { children: string }) => (
     <Text style={styles.line}>{children}</Text>
@@ -223,7 +226,7 @@ export async function generateHojaVidaPdf(args: {
         <Image style={styles.logo} src={logo} fixed />
         <Footer />
         <Text style={styles.title}>HOJA DE VIDA VENTA A CREDITO</Text>
-        <Line>NUEVA _____ USADA ______</Line>
+        <Line>{`NUEVA ${x(!motoUsada && !!c?.estado)}____ USADA ${x(motoUsada)}_____`}</Line>
         <Line>{`FECHA: ${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`}</Line>
         <Line>{`NOMBRE COMPLETO: ${form.nombre_completo}`}</Line>
         <Line>
