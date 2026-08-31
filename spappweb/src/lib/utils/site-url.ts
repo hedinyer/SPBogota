@@ -21,3 +21,8 @@ export function hojaVidaUrl(ref?: string | null) {
   if (!slug) return base;
   return `${base}?ref=${encodeURIComponent(slug)}`;
 }
+
+/** Link público de seguimiento de envío de tienda. */
+export function seguimientoUrl(codigo: string) {
+  return `${getSiteUrl()}/seguimiento/${encodeURIComponent(codigo.trim().toUpperCase())}`;
+}

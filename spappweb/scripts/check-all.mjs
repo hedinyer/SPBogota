@@ -17,6 +17,7 @@ const checks = [
   "src/lib/agent/chat-content.check.ts",
   "src/lib/agent/cobranza.check.ts",
   "src/lib/persianas/checkin.check.ts",
+  "src/lib/envios/envio-codigo.check.ts",
 ];
 
 function run(file) {

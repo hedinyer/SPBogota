@@ -28,6 +28,7 @@ const adminProtectedPrefixes = [
   "/vendidas",
   "/tarjetas-propiedad",
   "/historial-ventas",
+  "/envios",
   "/solicitudes",
 ];
 
