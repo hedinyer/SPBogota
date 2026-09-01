@@ -172,6 +172,8 @@ export interface UserMotoCompraRow {
   placa: string | null;
   chasis: string | null;
   referencia: string | null;
+  /** Nueva / usada para el PDF. Null = inferir de garaje o referencia. */
+  condicion: GarajeCondicion | null;
   fecha_entrega: string | null;
   doc_tarjeta_propiedad_path: string | null;
   doc_soat_path: string | null;
@@ -340,6 +342,31 @@ export const GARAJE_CONDICION_LABELS: Record<GarajeCondicion, string> = {
   segunda_mano: "Segunda mano",
   recuperada: "Recuperada",
 };
+
+/** Referencia tipo "USADA GRIS" / "bera sbr 150 segunda". */
+export function referenciaSugiereUsada(referencia?: string | null): boolean {
+  return /usada|segunda|recuperad/i.test(referencia ?? "");
+}
+
+/** Valor del selector Nueva/Usada al editar placa y chasis. */
+export function compraCondicionFormValue(compra?: {
+  condicion?: string | null;
+  referencia?: string | null;
+} | null): "nueva" | "segunda_mano" {
+  if (
+    compra?.condicion === "segunda_mano" ||
+    compra?.condicion === "recuperada"
+  ) {
+    return "segunda_mano";
+  }
+  if (compra?.condicion === "nueva") return "nueva";
+  return referenciaSugiereUsada(compra?.referencia) ? "segunda_mano" : "nueva";
+}
+
+export const COMPRA_CONDICION_OPTIONS = [
+  { value: "nueva", label: "Nueva" },
+  { value: "segunda_mano", label: "Usada" },
+] as const;
 
 export const GARAJE_ORIGEN_LABELS: Record<GarajeOrigen, string> = {
   manual: "Manual",

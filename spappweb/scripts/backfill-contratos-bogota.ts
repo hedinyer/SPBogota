@@ -23,8 +23,11 @@ async function main() {
   const { regenerateSignedContractPdfs } = await import(
     "../src/lib/contracts/regenerate-signed-pdfs"
   );
-  const { fetchGarajeCondicion } = await import(
+  const { resolveCondicionContrato } = await import(
     "../src/lib/contracts/garaje-condicion"
+  );
+  const { estadoMotoContrato } = await import(
+    "../src/lib/contracts/contrato-renting-clausulas"
   );
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -40,8 +43,13 @@ async function main() {
     .not("signature_path", "is", null);
 
   if (error) throw new Error(error.message);
-  const contracts = rows ?? [];
-  console.log(`Firmados con firma: ${contracts.length}`);
+  const onlyUsers = process.argv.slice(2).map(Number).filter((n) => n > 0);
+  const contracts = (rows ?? []).filter(
+    (row) => onlyUsers.length === 0 || onlyUsers.includes(row.user_id as number),
+  );
+  console.log(
+    `Firmados con firma: ${contracts.length}${onlyUsers.length ? ` (filtro users ${onlyUsers.join(",")})` : ""}`,
+  );
 
   let ok = 0;
   let fail = 0;
@@ -61,15 +69,17 @@ async function main() {
       const { data: compra } = await supabase
         .from("user_moto_compra")
         .select(
-          "modelo, color, placa, chasis, referencia, frecuencia_pago, cuota_inicial_monto, monto_cuota_periodo, garaje_moto_id",
+          "modelo, color, placa, chasis, referencia, condicion, frecuencia_pago, cuota_inicial_monto, monto_cuota_periodo, garaje_moto_id",
         )
         .eq("user_id", userId)
         .maybeSingle();
 
       const condicion = compra?.placa
-        ? await fetchGarajeCondicion(supabase, {
+        ? await resolveCondicionContrato(supabase, {
+            condicion: compra.condicion,
             garajeMotoId: compra.garaje_moto_id as string | null,
             placa: compra.placa as string,
+            referencia: (compra.referencia as string | null) ?? null,
           })
         : null;
 
@@ -112,9 +122,10 @@ async function main() {
       if (updateError) throw new Error(updateError.message);
 
       ok += 1;
-      const estado = condicion === "segunda_mano" || condicion === "recuperada"
-        ? "Usada"
-        : "Nueva";
+      const estado = estadoMotoContrato(
+        condicion,
+        (compra?.referencia as string | null) ?? null,
+      );
       console.log(
         `OK ${ok}/${contracts.length} user=${userId} ${id} estado=${estado} condicion=${condicion ?? "—"}`,
       );

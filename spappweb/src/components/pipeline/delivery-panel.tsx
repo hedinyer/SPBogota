@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { MessageCircle } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -12,10 +12,12 @@ import {
   type MotoDocumentoTipo,
 } from "@/lib/actions/admin-actions";
 import type { UserMotoCompraRow } from "@/lib/pipeline/types";
+import { compraCondicionFormValue, COMPRA_CONDICION_OPTIONS } from "@/lib/pipeline/types";
 import { formatDateOnly } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TouchSelect } from "@/components/ui/touch-select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   AlertDialog,
@@ -215,6 +217,9 @@ export function DeliveryPanel({
   clienteNombre,
 }: DeliveryPanelProps) {
   const [pending, startTransition] = useTransition();
+  const [condicion, setCondicion] = useState<"nueva" | "segunda_mano">(
+    compraCondicionFormValue(compra),
+  );
 
   if (!compra) {
     return (
@@ -290,6 +295,7 @@ export function DeliveryPanel({
                   placa: String(fd.get("placa")),
                   chasis: String(fd.get("chasis")),
                   referencia: String(fd.get("referencia") || ""),
+                  condicion,
                   fechaEntrega: String(fd.get("fechaEntrega")),
                 }),
               "Datos de retiro guardados.",
@@ -314,6 +320,18 @@ export function DeliveryPanel({
                 name="chasis"
                 defaultValue={compra.chasis ?? ""}
                 required
+              />
+            </div>
+            <div className="flex flex-col gap-2 sm:col-span-2">
+              <Label htmlFor="condicion">Estado de la moto</Label>
+              <TouchSelect
+                id="condicion"
+                aria-label="Estado de la moto"
+                value={condicion}
+                onChange={(v) =>
+                  setCondicion(v as "nueva" | "segunda_mano")
+                }
+                options={[...COMPRA_CONDICION_OPTIONS]}
               />
             </div>
             <div className="flex flex-col gap-2">

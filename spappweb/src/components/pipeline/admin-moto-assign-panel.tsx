@@ -10,7 +10,7 @@ import {
 } from "@/lib/moto-payment";
 import { MONTO_VISITA_DEFAULT } from "@/lib/payments/visita-monto";
 import type { BikeRow, FrecuenciaPago, UserMotoCompraRow } from "@/lib/pipeline/types";
-import { FRECUENCIA_LABELS } from "@/lib/pipeline/types";
+import { FRECUENCIA_LABELS, compraCondicionFormValue, COMPRA_CONDICION_OPTIONS } from "@/lib/pipeline/types";
 import { formatCop } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +50,9 @@ export function AdminMotoAssignPanel({
   const [cuotaInicial, setCuotaInicial] = useState("");
   const [cuotaDiaria, setCuotaDiaria] = useState("");
   const [montoVisita, setMontoVisita] = useState("");
+  const [condicion, setCondicion] = useState<"nueva" | "segunda_mano">(
+    compraCondicionFormValue(compra),
+  );
 
   const activeBikes = bikes.filter((b) => b.activo);
   const selectedBike = activeBikes.find((b) => String(b.id) === bikeId);
@@ -135,6 +138,7 @@ export function AdminMotoAssignPanel({
                   placa: String(fd.get("placa") || "").trim() || undefined,
                   chasis: String(fd.get("chasis")),
                   referencia: String(fd.get("referencia") || "") || undefined,
+                  condicion,
                   cuotaInicial: parsedInicial,
                   cuotaDiaria: parsedDiaria,
                   montoVisita: parsedVisita,
@@ -261,6 +265,18 @@ export function AdminMotoAssignPanel({
                 name="chasis"
                 required
                 defaultValue={compra?.chasis ?? ""}
+              />
+            </div>
+            <div className="flex flex-col gap-2 sm:col-span-2">
+              <Label htmlFor="condicion">Estado de la moto</Label>
+              <TouchSelect
+                id="condicion"
+                aria-label="Estado de la moto"
+                value={condicion}
+                onChange={(v) =>
+                  setCondicion(v as "nueva" | "segunda_mano")
+                }
+                options={[...COMPRA_CONDICION_OPTIONS]}
               />
             </div>
             <div className="flex flex-col gap-2 sm:col-span-2">

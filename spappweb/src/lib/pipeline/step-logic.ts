@@ -399,6 +399,7 @@ export function runPipelineSelfCheck(): void {
     placa: "ABC123",
     chasis: "CH1",
     referencia: null,
+    condicion: null,
     fecha_entrega: null,
     doc_tarjeta_propiedad_path: null,
     doc_soat_path: null,

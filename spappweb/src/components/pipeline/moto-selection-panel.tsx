@@ -11,12 +11,13 @@ import type {
   DigitalContractRow,
   UserMotoCompraRow,
 } from "@/lib/pipeline/types";
-import { FRECUENCIA_LABELS, COMPRA_ESTADO_LABELS } from "@/lib/pipeline/types";
+import { FRECUENCIA_LABELS, COMPRA_ESTADO_LABELS, compraCondicionFormValue, COMPRA_CONDICION_OPTIONS } from "@/lib/pipeline/types";
 import { formatCop } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TouchSelect } from "@/components/ui/touch-select";
 import { getSiteUrl } from "@/lib/utils/site-url";
 
 interface MotoSelectionPanelProps {
@@ -53,6 +54,9 @@ export function MotoSelectionPanel({
   );
   const [cuotaAdelantada, setCuotaAdelantada] = useState(
     String(compra?.monto_cuota_periodo ?? ""),
+  );
+  const [condicion, setCondicion] = useState<"nueva" | "segunda_mano">(
+    compraCondicionFormValue(compra),
   );
 
   useEffect(() => {
@@ -131,6 +135,7 @@ export function MotoSelectionPanel({
           userId,
           placa,
           chasis,
+          condicion,
         });
         if (canEditMontos && inicial != null && adelantada != null) {
           const montosChanged =
@@ -200,6 +205,21 @@ export function MotoSelectionPanel({
                 defaultValue={compra.chasis ?? ""}
                 className="font-medium"
                 disabled={!userId || pending}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5 sm:col-span-2">
+              <Label htmlFor="moto-condicion" className="text-muted-foreground">
+                Estado de la moto
+              </Label>
+              <TouchSelect
+                id="moto-condicion"
+                aria-label="Estado de la moto"
+                value={condicion}
+                onChange={(v) =>
+                  setCondicion(v as "nueva" | "segunda_mano")
+                }
+                disabled={!userId || pending}
+                options={[...COMPRA_CONDICION_OPTIONS]}
               />
             </div>
             <div className="flex flex-col gap-1.5">

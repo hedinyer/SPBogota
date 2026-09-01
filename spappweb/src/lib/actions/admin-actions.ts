@@ -14,7 +14,7 @@ import { canChooseFlowOrder } from "@/lib/pipeline/step-logic";
 import { MIN_CUOTA_INICIAL } from "@/lib/moto-payment";
 import { MONTO_VISITA_DEFAULT } from "@/lib/payments/visita-monto";
 import type { CompraContratoInput } from "@/lib/contracts/contrato-renting-clausulas";
-import { fetchGarajeCondicion } from "@/lib/contracts/garaje-condicion";
+import { resolveCondicionContrato } from "@/lib/contracts/garaje-condicion";
 import {
   hojaVidaFormSchema,
   hojaVidaFormToJson,
@@ -140,6 +140,7 @@ const assignMotoSchema = z.object({
   placa: z.string().trim().optional(),
   chasis: z.string().trim().min(1),
   referencia: z.string().trim().optional(),
+  condicion: z.enum(["nueva", "segunda_mano"]).default("nueva"),
   cuotaInicial: z.number().int().min(MIN_CUOTA_INICIAL).optional(),
   cuotaDiaria: z.number().int().positive().optional(),
   montoVisita: z.number().int().min(0).optional(),
@@ -204,15 +205,17 @@ export async function updateContractHojaVida(
       const { data: compra } = await supabase
         .from("user_moto_compra")
         .select(
-          "modelo, color, placa, chasis, referencia, frecuencia_pago, cuota_inicial_monto, monto_cuota_periodo, garaje_moto_id",
+          "modelo, color, placa, chasis, referencia, condicion, frecuencia_pago, cuota_inicial_monto, monto_cuota_periodo, garaje_moto_id",
         )
         .eq("user_id", parsed.userId)
         .maybeSingle();
 
       const condicion = compra?.placa
-        ? await fetchGarajeCondicion(supabase, {
+        ? await resolveCondicionContrato(supabase, {
+            condicion: compra.condicion,
             garajeMotoId: compra.garaje_moto_id as string | null,
             placa: compra.placa as string,
+            referencia: (compra.referencia as string | null) ?? null,
           })
         : null;
 
@@ -391,6 +394,7 @@ const deliverySchema = z.object({
   placa: z.string().min(1),
   chasis: z.string().min(1),
   referencia: z.string().optional(),
+  condicion: z.enum(["nueva", "segunda_mano"]).optional(),
   fechaEntrega: z.string().min(1).optional(),
 });
 
@@ -401,6 +405,7 @@ export async function updateDelivery(input: z.infer<typeof deliverySchema>) {
     placa: string;
     chasis: string;
     referencia?: string | null;
+    condicion?: "nueva" | "segunda_mano";
     fecha_entrega?: string;
   } = {
     placa: parsed.placa.trim().toUpperCase(),
@@ -408,6 +413,9 @@ export async function updateDelivery(input: z.infer<typeof deliverySchema>) {
   };
   if (parsed.referencia !== undefined) {
     update.referencia = parsed.referencia.trim() || null;
+  }
+  if (parsed.condicion) {
+    update.condicion = parsed.condicion;
   }
   if (parsed.fechaEntrega) {
     update.fecha_entrega = parsed.fechaEntrega;

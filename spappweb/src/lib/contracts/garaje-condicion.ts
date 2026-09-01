@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CondicionMotoContrato } from "@/lib/contracts/contrato-renting-clausulas";
+import { referenciaSugiereUsada } from "@/lib/pipeline/types";
 
 const VALID = new Set<CondicionMotoContrato>([
   "nueva",
@@ -7,7 +8,7 @@ const VALID = new Set<CondicionMotoContrato>([
   "recuperada",
 ]);
 
-function asCondicion(value: unknown): CondicionMotoContrato | null {
+export function asCondicion(value: unknown): CondicionMotoContrato | null {
   return VALID.has(value as CondicionMotoContrato)
     ? (value as CondicionMotoContrato)
     : null;
@@ -40,4 +41,23 @@ export async function fetchGarajeCondicion(
     .maybeSingle();
 
   return asCondicion(data?.condicion);
+}
+
+/** Selector de compra > referencia USADA > garaje. */
+export async function resolveCondicionContrato(
+  supabase: SupabaseClient,
+  compra: {
+    condicion?: unknown;
+    garajeMotoId?: string | null;
+    placa?: string | null;
+    referencia?: string | null;
+  },
+): Promise<CondicionMotoContrato | null> {
+  const explicit = asCondicion(compra.condicion);
+  if (explicit) return explicit;
+  if (referenciaSugiereUsada(compra.referencia)) return "segunda_mano";
+  return fetchGarajeCondicion(supabase, {
+    garajeMotoId: compra.garajeMotoId,
+    placa: compra.placa,
+  });
 }

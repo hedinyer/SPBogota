@@ -48,7 +48,7 @@ export async function selectMotoFromContract(
     const { data: garaje, error: garajeError } = await supabase
       .from("garaje_motos")
       .select(
-        "id, modelo, color, placa, referencia, estado, cuota_inicial, cuota_diaria, monto_visita",
+        "id, modelo, color, placa, referencia, estado, cuota_inicial, cuota_diaria, monto_visita, condicion",
       )
       .eq("id", parsed.garajeMotoId)
       .maybeSingle();
@@ -89,6 +89,7 @@ export async function selectMotoFromContract(
       color: garaje.color,
       placa: garaje.placa,
       referencia: garaje.referencia,
+      condicion: garaje.condicion ?? null,
       frecuencia_pago: parsed.frecuencia,
       ...payment,
       estado: "pendiente_pago",

@@ -4,7 +4,7 @@
  */
 
 import type { FrecuenciaPago } from "../pipeline/types";
-import { FRECUENCIA_LABELS } from "../pipeline/types";
+import { FRECUENCIA_LABELS, referenciaSugiereUsada } from "../pipeline/types";
 import { formatCop } from "../utils/format-cop";
 
 export const EMPRESA_PROPIETARIA = {
@@ -74,10 +74,12 @@ export interface CompraContratoInput {
 /** ESTADO del bien en contrato / hoja de vida. */
 export function estadoMotoContrato(
   condicion?: CondicionMotoContrato | null,
+  referencia?: string | null,
 ): "Nueva" | "Usada" {
-  return condicion === "segunda_mano" || condicion === "recuperada"
-    ? "Usada"
-    : "Nueva";
+  if (condicion === "segunda_mano" || condicion === "recuperada") return "Usada";
+  if (condicion === "nueva") return "Nueva";
+  if (referenciaSugiereUsada(referencia)) return "Usada";
+  return "Nueva";
 }
 
 export interface Clausula {
@@ -150,7 +152,7 @@ export function buildContratoComercial(compra: CompraContratoInput): Omit<
     marca: EMPRESA_PROPIETARIA.marcaMoto,
     modelo: compra.modelo,
     linea: compra.modelo,
-    estado: estadoMotoContrato(compra.condicion),
+    estado: estadoMotoContrato(compra.condicion, compra.referencia),
     chasis: compra.chasis,
     motor: "N/A",
     placa: compra.placa,
@@ -536,6 +538,12 @@ export function contratoClausulasSelfCheck(): void {
   }
   if (estadoMotoContrato("nueva") !== "Nueva") {
     throw new Error("estadoMotoContrato nueva");
+  }
+  if (estadoMotoContrato("nueva", "USADA GRIS") !== "Nueva") {
+    throw new Error("estadoMotoContrato nueva gana a referencia");
+  }
+  if (estadoMotoContrato(null, "bera sbr 150 segunda") !== "Usada") {
+    throw new Error("estadoMotoContrato referencia segunda");
   }
   if (
     buildContratoComercial({

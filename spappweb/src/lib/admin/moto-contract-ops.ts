@@ -136,6 +136,7 @@ const assignMotoSchema = z.object({
   placa: z.string().trim().min(1).optional(),
   chasis: z.string().trim().min(1).optional(),
   referencia: z.string().trim().optional(),
+  condicion: z.enum(["nueva", "segunda_mano"]).default("nueva"),
   cuotaInicial: z.number().int().min(MIN_CUOTA_INICIAL).optional(),
   cuotaDiaria: z.number().int().positive().optional(),
   montoVisita: z.number().int().min(0).optional(),
@@ -194,6 +195,7 @@ export async function assignMotoByAdminOp(
   const placa = parsed.placa?.trim().toUpperCase() || null;
   const chasis = parsed.chasis?.trim() || null;
   const referencia = parsed.referencia?.trim() || null;
+  const condicion = parsed.condicion;
 
   const { data: existing } = await supabase
     .from("user_moto_compra")
@@ -219,6 +221,7 @@ export async function assignMotoByAdminOp(
         placa,
         chasis,
         referencia,
+        condicion,
       })
       .eq("id", existing.id)
       .select("id")
@@ -241,6 +244,7 @@ export async function assignMotoByAdminOp(
         placa,
         chasis,
         referencia,
+        condicion,
         estado: "pendiente_pago",
       })
       .select("id")

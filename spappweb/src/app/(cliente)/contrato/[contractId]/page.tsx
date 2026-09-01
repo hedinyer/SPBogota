@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildContratoComercial } from "@/lib/contracts/contrato-renting-clausulas";
-import { fetchGarajeCondicion } from "@/lib/contracts/garaje-condicion";
+import { resolveCondicionContrato } from "@/lib/contracts/garaje-condicion";
 import {
   prefillFromHojaYContrato,
   resolveHojaVidaForContract,
@@ -74,7 +74,7 @@ export default async function ContratoPage({
   let { data: compra } = await supabase
     .from("user_moto_compra")
     .select(
-      "modelo, color, placa, chasis, referencia, frecuencia_pago, cuota_inicial_monto, monto_cuota_periodo, garaje_moto_id",
+      "modelo, color, placa, chasis, referencia, condicion, frecuencia_pago, cuota_inicial_monto, monto_cuota_periodo, garaje_moto_id",
     )
     .eq("digital_contract_id", contractId)
     .maybeSingle();
@@ -83,7 +83,7 @@ export default async function ContratoPage({
     const { data: byUser } = await supabase
       .from("user_moto_compra")
       .select(
-        "modelo, color, placa, chasis, referencia, frecuencia_pago, cuota_inicial_monto, monto_cuota_periodo, garaje_moto_id",
+        "modelo, color, placa, chasis, referencia, condicion, frecuencia_pago, cuota_inicial_monto, monto_cuota_periodo, garaje_moto_id",
       )
       .eq("user_id", contract.user_id)
       .maybeSingle();
@@ -122,9 +122,11 @@ export default async function ContratoPage({
     ? TIPO_IDENTIFICACION_LABELS[hoja.tipo_identificacion]
     : "";
 
-  const condicion = await fetchGarajeCondicion(supabase, {
+  const condicion = await resolveCondicionContrato(supabase, {
+    condicion: compra.condicion,
     garajeMotoId: compra.garaje_moto_id as string | null,
     placa: compra.placa as string,
+    referencia: (compra.referencia as string | null) ?? null,
   });
 
   return (
