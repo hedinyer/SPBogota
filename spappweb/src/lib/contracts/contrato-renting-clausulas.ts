@@ -347,7 +347,7 @@ export const blocks: ClausulaBlock[] = [
       {
         titulo: "DECIMA NOVENA",
         texto:
-          "Para efectos de notificaciones LA PROPIETARIA las recibirán en la dirección electrónica marisolpinilla@hotmail.com o en [DIRECCION_EMPRESA], y EL CONTRATANTE, en la dirección: [DIRECCION_NOTIFICACIONES]",
+          "Para efectos de notificaciones LA PROPIETARIA las recibirán en la dirección electrónica marisolpinilla@hotmail.com o en [DIRECCION_EMPRESA], y EL CONTRATANTE, en la dirección: [DIRECCION_NOTIFICACIONES], teléfono: [CELULAR_CONTRATANTE]",
       },
       {
         titulo: "VIGÉSIMA",
@@ -399,6 +399,10 @@ function applyContratantePlaceholders(text: string, form: ContratoData): string 
     .replaceAll(
       "[DIRECCION_NOTIFICACIONES]",
       form.direccionNotificaciones || "_________________________",
+    )
+    .replaceAll(
+      "[CELULAR_CONTRATANTE]",
+      form.celularContratante.trim() || "________________",
     )
     .replaceAll("[DIRECCION_EMPRESA]", EMPRESA_PROPIETARIA.direccion);
 }
@@ -598,5 +602,16 @@ export function contratoClausulasSelfCheck(): void {
   }
   if (!firmaPpt.includes("se firma en Bogotá")) {
     throw new Error("renderFirma ciudad Bogotá");
+  }
+  const novena = blocks
+    .flatMap((b) => b.clausulas)
+    .find((c) => /D[EÉ]CIMA NOVENA/.test(c.titulo));
+  if (!novena) throw new Error("cláusula décima novena");
+  const novenaTxt = renderClausulaTexto(novena.texto, rebuilt);
+  if (
+    !novenaTxt.includes("Calle 1, barrio Centro") ||
+    !novenaTxt.includes("teléfono: 3011112233")
+  ) {
+    throw new Error("cláusula 19 dirección + celular");
   }
 }
