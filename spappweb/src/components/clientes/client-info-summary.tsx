@@ -1,4 +1,5 @@
 ﻿import { Bike, User } from "lucide-react";
+import { parseContratoHistorial } from "@/lib/admin/contrato-historial";
 import { parseTitularidadHistorial } from "@/lib/admin/titularidad";
 import type { BikeRow, ClientPipeline } from "@/lib/pipeline/types";
 import {
@@ -8,6 +9,7 @@ import {
 import { getMoraDisplay, moraEstadoLabel } from "@/lib/pipeline/mora-utils";
 import { referralLabel } from "@/lib/referrals";
 import { formatCop, formatCuotas } from "@/lib/utils/format";
+import { getContractPublicUrl } from "@/lib/utils/storage-urls";
 import { GpsMotoPanel } from "@/components/pipeline/gps-moto-panel";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -92,10 +94,11 @@ export function ClientInfoSummary({
     pipeline.document?.referral_source;
 
   const placaGps = compra?.placa?.trim() || null;
-  const titularidadHistorial = parseTitularidadHistorial(
-    (compra?.admin_data as Record<string, unknown> | undefined) ?? null,
-  );
-  if (!hasContent && !placaGps) return null;
+  const compraAdmin =
+    (compra?.admin_data as Record<string, unknown> | undefined) ?? null;
+  const titularidadHistorial = parseTitularidadHistorial(compraAdmin);
+  const contratoHistorial = parseContratoHistorial(compraAdmin);
+  if (!hasContent && !placaGps && contratoHistorial.length === 0) return null;
 
   return (
     <Card className="overflow-hidden border-border shadow-none">
@@ -200,6 +203,53 @@ export function ClientInfoSummary({
             </div>
           ) : null}
         </div>
+
+        {contratoHistorial.length > 0 && (
+          <div className="border-t border-border px-6 py-4">
+            <p className="text-xs text-muted-foreground">
+              Contrato anterior (renovación)
+            </p>
+            <ul className="mt-2 flex flex-col gap-1.5">
+              {contratoHistorial.map((e, i) => {
+                const pdfUrl = getContractPublicUrl(e.contrato_pdf_path);
+                return (
+                  <li key={`${e.renovado_at}-${i}`} className="text-sm">
+                    <span className="font-medium">
+                      {e.modelo ?? "Moto"}
+                      {e.placa ? ` · ${e.placa}` : ""}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {" · "}
+                      {FRECUENCIA_LABELS[e.frecuencia_pago] ?? e.frecuencia_pago}
+                      {" "}
+                      {formatCop(e.monto_cuota_periodo)}
+                      {" · perdonado "}
+                      {formatCop(e.monto_adeudado_perdonado)}
+                      {" · renovado "}
+                      {new Date(e.renovado_at).toLocaleString("es-CO", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })}
+                    </span>
+                    {pdfUrl ? (
+                      <>
+                        {" · "}
+                        <a
+                          href={pdfUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline underline-offset-2"
+                        >
+                          PDF original
+                        </a>
+                      </>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         {titularidadHistorial.length > 0 && (
           <div className="border-t border-border px-6 py-4">

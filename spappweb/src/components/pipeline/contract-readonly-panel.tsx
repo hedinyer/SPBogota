@@ -11,6 +11,7 @@ import {
 import { ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { updateContractHojaVida } from "@/lib/actions/admin-actions";
+import { getContratoRenovacionPdfPath } from "@/lib/admin/contrato-historial";
 import { contractStatusLabel } from "@/lib/pipeline/step-logic";
 import { getContractPublicUrl } from "@/lib/utils/storage-urls";
 import {
@@ -52,8 +53,15 @@ export function ContractReadonlyPanel({ contract }: ContractReadonlyPanelProps) 
     : "";
   const hojaPdfRaw = getContractPublicUrl(contract.hoja_vida_pdf_path);
   const contratoPdfRaw = getContractPublicUrl(contract.contrato_pdf_path);
+  const renovacionPath = getContratoRenovacionPdfPath(
+    (contract.admin_data as Record<string, unknown> | null) ?? null,
+  );
+  const renovacionPdfRaw = getContractPublicUrl(renovacionPath);
   const hojaPdf = hojaPdfRaw ? `${hojaPdfRaw}${cacheBust}` : null;
   const contratoPdf = contratoPdfRaw ? `${contratoPdfRaw}${cacheBust}` : null;
+  const renovacionPdf = renovacionPdfRaw
+    ? `${renovacionPdfRaw}${cacheBust}`
+    : null;
 
   return (
     <Card>
@@ -75,6 +83,9 @@ export function ContractReadonlyPanel({ contract }: ContractReadonlyPanelProps) 
         <div className="grid gap-2 sm:grid-cols-2">
           {hojaPdf && <PdfLink href={hojaPdf} label="PDF Hoja de vida" />}
           {contratoPdf && <PdfLink href={contratoPdf} label="PDF Contrato" />}
+          {renovacionPdf && (
+            <PdfLink href={renovacionPdf} label="Contrato PDF Renovación" />
+          )}
         </div>
         <HojaVidaAdminEditor contract={contract} />
       </CardContent>
