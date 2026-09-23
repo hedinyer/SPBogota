@@ -11,6 +11,7 @@ import {
   emitPipelineEvent,
 } from "@/lib/agent/pipeline-events";
 import { canChooseFlowOrder } from "@/lib/pipeline/step-logic";
+import { DIAS_RECOGER_BANDEJA } from "@/lib/pipeline/mora-utils";
 import { MIN_CUOTA_INICIAL } from "@/lib/moto-payment";
 import { MONTO_VISITA_DEFAULT } from "@/lib/payments/visita-monto";
 import type { CompraContratoInput } from "@/lib/contracts/contrato-renting-clausulas";
@@ -37,6 +38,7 @@ import { storagePathFromPublicUrl } from "@/lib/utils/storage-urls";
 
 function revalidateClient(userId: number) {
   revalidatePath("/inbox");
+  revalidatePath("/clientes");
   revalidatePath(`/clientes/${userId}`);
   revalidatePath("/visitadores");
 }
@@ -1385,6 +1387,143 @@ export async function markMotoRecogida(
   if (error) throw new Error(error.message);
 
   revalidatePath("/garaje");
+  revalidateClient(parsed.userId);
+  return { ok: true };
+}
+
+const markMotoRecogidaByUserSchema = z.object({
+  userId: z.number().int().positive(),
+});
+
+/** Marca recogida por userId en Pinilla: motos_para_recoger + estado_fisico + garaje. */
+export async function markMotoRecogidaByUserId(
+  input: z.infer<typeof markMotoRecogidaByUserSchema>,
+) {
+  const parsed = markMotoRecogidaByUserSchema.parse(input);
+  const supabase = await assertAdmin();
+
+  const { data: compra, error: compraError } = await supabase
+    .from("user_moto_compra")
+    .select("id, estado, estado_fisico, modelo, color, placa, referencia, chasis")
+    .eq("user_id", parsed.userId)
+    .eq("estado", "entregada")
+    .maybeSingle();
+  if (compraError) throw new Error(compraError.message);
+  if (!compra) throw new Error("Compra entregada no encontrada.");
+  if (compra.estado_fisico === "recogida") {
+    throw new Error("Esta moto ya fue marcada como recogida.");
+  }
+
+  const { data: atraso } = await supabase
+    .from("atrasos")
+    .select("dias_atraso, monto_adeudado")
+    .eq("user_moto_compra_id", compra.id)
+    .maybeSingle();
+
+  const dias = Number(atraso?.dias_atraso) || 0;
+  const monto = Number(atraso?.monto_adeudado) || 0;
+  if (monto <= 0 || dias < DIAS_RECOGER_BANDEJA) {
+    throw new Error(
+      "Solo se puede marcar recogida con 4+ días de atraso y saldo pendiente.",
+    );
+  }
+
+  const { data: existing } = await supabase
+    .from("motos_para_recoger")
+    .select("id, estado")
+    .eq("user_moto_compra_id", compra.id)
+    .maybeSingle();
+
+  if (existing?.estado === "recogida") {
+    await supabase
+      .from("user_moto_compra")
+      .update({ estado_fisico: "recogida" })
+      .eq("id", compra.id)
+      .eq("estado", "entregada");
+    throw new Error("Esta moto ya fue marcada como recogida.");
+  }
+
+  const fechaRecogida = new Date().toISOString();
+  if (existing) {
+    const { error } = await supabase
+      .from("motos_para_recoger")
+      .update({
+        estado: "recogida",
+        fecha_recogida: fechaRecogida,
+        dias_atraso: dias,
+        monto_adeudado: monto,
+      })
+      .eq("id", existing.id);
+    if (error) throw new Error(error.message);
+  } else {
+    const { data: moroso } = await supabase
+      .from("morosos")
+      .select("id")
+      .eq("user_moto_compra_id", compra.id)
+      .maybeSingle();
+
+    const { error } = await supabase.from("motos_para_recoger").insert({
+      user_moto_compra_id: compra.id,
+      user_id: parsed.userId,
+      moroso_id: moroso?.id ?? null,
+      dias_atraso: dias,
+      monto_adeudado: monto,
+      estado: "recogida",
+      fecha_recogida: fechaRecogida,
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  await updateVendidaEstadoFisico({
+    compraId: compra.id,
+    userId: parsed.userId,
+    estadoFisico: "recogida",
+  });
+  return { ok: true };
+}
+
+const setClienteVigiladoSchema = z.object({
+  userId: z.number().int().positive(),
+  compraId: z.string().uuid(),
+  vigilado: z.boolean(),
+  nota: z.string().optional(),
+});
+
+/** Pinilla: vigilancia en user_moto_compra.admin_data (no existe users.vigilado). */
+export async function setClienteVigilado(
+  input: z.infer<typeof setClienteVigiladoSchema>,
+) {
+  const parsed = setClienteVigiladoSchema.parse(input);
+  const supabase = await assertAdmin();
+
+  const nota = (parsed.nota ?? "").trim();
+  if (parsed.vigilado && !nota) {
+    throw new Error("Indica el motivo de la vigilancia.");
+  }
+
+  const { data: compra, error: fetchError } = await supabase
+    .from("user_moto_compra")
+    .select("id, admin_data")
+    .eq("id", parsed.compraId)
+    .eq("user_id", parsed.userId)
+    .maybeSingle();
+  if (fetchError) throw new Error(fetchError.message);
+  if (!compra) throw new Error("Compra no encontrada.");
+
+  const adminData = {
+    ...((compra.admin_data as Record<string, unknown>) ?? {}),
+    vigilado: parsed.vigilado,
+  };
+  if (parsed.vigilado) {
+    adminData.nota_vigilancia = nota;
+  }
+
+  const { error } = await supabase
+    .from("user_moto_compra")
+    .update({ admin_data: adminData })
+    .eq("id", parsed.compraId);
+  if (error) throw new Error(error.message);
+
   revalidateClient(parsed.userId);
   return { ok: true };
 }

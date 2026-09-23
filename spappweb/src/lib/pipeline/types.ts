@@ -179,7 +179,11 @@ export interface UserMotoCompraRow {
   doc_soat_path: string | null;
   doc_tecno_path: string | null;
   seleccionado_at: string;
-  admin_data?: { entrega_antes_visita?: boolean };
+  admin_data?: {
+    entrega_antes_visita?: boolean;
+    vigilado?: boolean;
+    nota_vigilancia?: string | null;
+  };
 }
 
 export interface VendidaMotoRow extends UserMotoCompraRow {
@@ -494,11 +498,18 @@ export interface ClientSearchResult {
   cedula: string | null;
   placa: string | null;
   motoLabel: string | null;
+  compraId: string | null;
   compraEstado: MotoCompraEstado | null;
   cuotasPagadas: number;
   diasAtraso: number;
+  motoRecogida: boolean;
+  puedeMarcarRecogida: boolean;
+  /** En Bogotá vive en user_moto_compra.admin_data (Pinilla no tiene users.vigilado). */
+  vigilado: boolean;
+  notaVigilancia: string | null;
   matchLabel: string;
   seleccionadoAt: string | null;
+  fechaVenta: string | null;
   selfieUrl: string | null;
   motoImagenUrl: string | null;
   /** Quién captó al cliente (Guillen, Punto de venta, …). */

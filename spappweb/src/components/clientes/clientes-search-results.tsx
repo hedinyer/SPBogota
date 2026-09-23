@@ -3,13 +3,19 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { ArrowRight, Bike, FileText, User, X } from "lucide-react";
+import { ArrowRight, Bike, FileText, Loader2, User, X } from "lucide-react";
 import { toast } from "sonner";
-import { deleteClienteSinVisita } from "@/lib/actions/admin-actions";
+import {
+  cancelCompra,
+  deleteClienteSinVisita,
+  markMotoRecogidaByUserId,
+  setClienteVigilado,
+} from "@/lib/actions/admin-actions";
 import {
   COMPRA_ESTADO_LABELS,
   type ClientSearchResult,
 } from "@/lib/pipeline/types";
+import { formatDateOnly } from "@/lib/utils/format";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +29,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -30,6 +46,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { GenerarFacturasDialog } from "@/components/clientes/generar-facturas-dialog";
+import { cn } from "@/lib/utils";
 
 function PhotoThumb({
   src,
@@ -57,19 +74,42 @@ function PhotoThumb({
   );
 }
 
+function CanceladoStamp() {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
+      aria-hidden
+    >
+      <span
+        className={cn(
+          "absolute right-[-0.5rem] top-8 select-none border-[3px] border-red-600",
+          "rotate-[-28deg] px-3 py-1 text-2xl font-black uppercase tracking-[0.2em] text-red-600",
+          "opacity-90 shadow-sm sm:right-0 sm:top-10 sm:px-4 sm:text-3xl",
+        )}
+      >
+        Cancelado
+      </span>
+    </div>
+  );
+}
+
 export function ClientesSearchResults({
   results,
   query,
   listTitle,
+  emptyHint,
 }: {
   results: ClientSearchResult[];
   query: string;
   listTitle?: string;
+  emptyHint?: string;
 }) {
   const router = useRouter();
   const [list, setList] = useState(results);
   const [pending, startTransition] = useTransition();
   const [toDelete, setToDelete] = useState<ClientSearchResult | null>(null);
+  const [toCancel, setToCancel] = useState<ClientSearchResult | null>(null);
+  const [toVigilar, setToVigilar] = useState<ClientSearchResult | null>(null);
   const [facturasUser, setFacturasUser] = useState<{
     userId: number;
     displayName: string;
@@ -96,6 +136,66 @@ export function ClientesSearchResults({
     });
   }
 
+  function confirmCancelContrato() {
+    if (!toCancel?.compraId) return;
+    const { userId, compraId, displayName } = toCancel;
+
+    startTransition(async () => {
+      try {
+        await cancelCompra(compraId, userId);
+        setList((prev) =>
+          prev.map((c) =>
+            c.userId === userId
+              ? {
+                  ...c,
+                  compraEstado: "cancelada",
+                  puedeMarcarRecogida: false,
+                }
+              : c,
+          ),
+        );
+        toast.success(`Contrato de ${displayName} marcado como cancelado.`);
+        setToCancel(null);
+        router.refresh();
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "No se pudo cancelar el contrato.",
+        );
+      }
+    });
+  }
+
+  function marcarRecogida(client: ClientSearchResult) {
+    startTransition(async () => {
+      try {
+        await markMotoRecogidaByUserId({ userId: client.userId });
+        setList((prev) =>
+          prev.map((c) =>
+            c.userId === client.userId
+              ? { ...c, motoRecogida: true, puedeMarcarRecogida: false }
+              : c,
+          ),
+        );
+        toast.success(
+          "Moto registrada en Garaje. Completa la foto de placa y ubicación.",
+          {
+            action: {
+              label: "Ir a Garaje",
+              onClick: () => {
+                window.location.href = "/garaje?fotoPendiente=1";
+              },
+            },
+          },
+        );
+        router.refresh();
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "No se pudo marcar como recogida.",
+        );
+      }
+    });
+  }
+
   if (results.length === 0) {
     return (
       <Empty className="border border-dashed border-border">
@@ -104,12 +204,18 @@ export function ClientesSearchResults({
             <User />
           </EmptyMedia>
           <EmptyTitle>
-            {query ? "Sin resultados" : "Sin clientes a crédito"}
+            {emptyHint
+              ? "Sin coincidencias"
+              : query
+                ? "Sin resultados"
+                : "Sin clientes a crédito"}
           </EmptyTitle>
           <EmptyDescription>
-            {query
-              ? `No se encontraron clientes para “${query}”. Prueba con placa, cédula o nombre completo.`
-              : "Aún no hay clientes con moto a crédito."}
+            {emptyHint
+              ? emptyHint
+              : query
+                ? `No se encontraron clientes para “${query}”. Prueba con placa, cédula o nombre completo.`
+                : "Aún no hay clientes con moto a crédito."}
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -123,133 +229,202 @@ export function ClientesSearchResults({
           {listTitle ?? `${list.length} resultado${list.length === 1 ? "" : "s"}`}
         </p>
         <ul className="grid gap-4 lg:grid-cols-2">
-          {list.map((client) => (
-            <li
-              key={client.userId}
-              className="overflow-hidden rounded-xl border border-border bg-background"
-            >
-              <div className="flex">
-                <div className="flex w-[6.5rem] shrink-0 flex-col border-r border-border sm:w-32">
-                  <div className="relative aspect-square overflow-hidden bg-muted/50">
-                    <PhotoThumb
-                      src={client.selfieUrl}
-                      alt={`Foto de ${client.displayName}`}
-                      fallback="user"
-                    />
-                    <span className="absolute bottom-1 left-1 rounded bg-foreground/70 px-1.5 py-0.5 text-[10px] font-medium text-background">
-                      Cliente
-                    </span>
-                  </div>
-                  <div className="relative aspect-square overflow-hidden border-t border-border bg-muted/50">
-                    <PhotoThumb
-                      src={client.motoImagenUrl}
-                      alt={client.motoLabel ? `Moto ${client.motoLabel}` : "Moto"}
-                      fallback="bike"
-                    />
-                    <span className="absolute bottom-1 left-1 rounded bg-foreground/70 px-1.5 py-0.5 text-[10px] font-medium text-background">
-                      {client.placa ?? "Moto"}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <Link
-                    href={`/clientes/${client.userId}`}
-                    className="min-w-0 flex-1 p-4 hover:bg-muted/50"
-                  >
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold">{client.displayName}</p>
-                        {client.matchLabel ? (
-                          <Badge variant="secondary" className="text-xs">
-                            {client.matchLabel}
-                          </Badge>
-                        ) : null}
-                        {client.compraEstado && (
-                          <Badge variant="outline" className="text-xs">
-                            {COMPRA_ESTADO_LABELS[client.compraEstado]}
-                          </Badge>
-                        )}
-                        {client.compraEstado &&
-                          (client.diasAtraso > 0 ? (
-                            <Badge
-                              variant="outline"
-                              className="border-red-200 bg-red-50 text-xs text-red-800"
-                            >
-                              {client.diasAtraso} día
-                              {client.diasAtraso === 1 ? "" : "s"} atraso
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="border-emerald-200 bg-emerald-50 text-xs text-emerald-800"
-                            >
-                              Al día
-                            </Badge>
-                          ))}
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        @{client.username}
-                        {client.cedula ? ` · C.C. ${client.cedula}` : ""}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Referido por {client.referralLabel}
-                      </p>
-                      {(client.placa || client.motoLabel) && (
-                        <p className="text-sm text-muted-foreground">
-                          {client.placa ? `Placa ${client.placa}` : null}
-                          {client.placa && client.motoLabel ? " · " : null}
-                          {client.motoLabel}
-                        </p>
-                      )}
-                      {client.cuotasPagadas > 0 && (
-                        <p className="text-sm text-muted-foreground">
-                          {client.cuotasPagadas} cuota
-                          {client.cuotasPagadas === 1 ? "" : "s"} pagada
-                          {client.cuotasPagadas === 1 ? "" : "s"}
-                        </p>
-                      )}
+          {list.map((client) => {
+            const cancelado = client.compraEstado === "cancelada";
+            return (
+              <li
+                key={client.userId}
+                className={cn(
+                  "relative overflow-hidden rounded-xl border border-border bg-background",
+                  cancelado && "border-red-200 bg-red-50/30",
+                )}
+              >
+                {cancelado ? <CanceladoStamp /> : null}
+                <div className="flex">
+                  <div className="flex w-[6.5rem] shrink-0 flex-col border-r border-border sm:w-32">
+                    <div className="relative aspect-square overflow-hidden bg-muted/50">
+                      <PhotoThumb
+                        src={client.selfieUrl}
+                        alt={`Foto de ${client.displayName}`}
+                        fallback="user"
+                      />
+                      <span className="absolute bottom-1 left-1 rounded bg-foreground/70 px-1.5 py-0.5 text-[10px] font-medium text-background">
+                        Cliente
+                      </span>
                     </div>
-                  </Link>
+                    <div className="relative aspect-square overflow-hidden border-t border-border bg-muted/50">
+                      <PhotoThumb
+                        src={client.motoImagenUrl}
+                        alt={
+                          client.motoLabel ? `Moto ${client.motoLabel}` : "Moto"
+                        }
+                        fallback="bike"
+                      />
+                      <span className="absolute bottom-1 left-1 rounded bg-foreground/70 px-1.5 py-0.5 text-[10px] font-medium text-background">
+                        {client.placa ?? "Moto"}
+                      </span>
+                    </div>
+                  </div>
 
-                  <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setFacturasUser({
-                          userId: client.userId,
-                          displayName: client.displayName,
-                        })
-                      }
-                    >
-                      <FileText className="mr-1.5 h-4 w-4" />
-                      Generar facturas
-                    </Button>
+                  <div className="flex min-w-0 flex-1 flex-col">
                     <Link
                       href={`/clientes/${client.userId}`}
-                      className="inline-flex items-center gap-1 text-sm font-medium text-foreground hover:text-foreground"
+                      className="min-w-0 flex-1 p-4 hover:bg-muted/50"
                     >
-                      Ver ficha
-                      <ArrowRight className="h-4 w-4" />
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold">{client.displayName}</p>
+                          {client.vigilado ? (
+                            <span className="vigilado-pulse text-sm font-bold">
+                              <span aria-hidden>!</span>
+                              Cliente vigilado
+                            </span>
+                          ) : null}
+                          {client.motoRecogida && !cancelado ? (
+                            <span className="text-sm font-bold uppercase tracking-wide text-foreground">
+                              MOTO RECOGIDA
+                            </span>
+                          ) : null}
+                          {client.matchLabel ? (
+                            <Badge variant="secondary" className="text-xs">
+                              {client.matchLabel}
+                            </Badge>
+                          ) : null}
+                          {client.compraEstado && (
+                            <Badge variant="outline" className="text-xs">
+                              {COMPRA_ESTADO_LABELS[client.compraEstado]}
+                            </Badge>
+                          )}
+                          {client.compraEstado &&
+                            !client.motoRecogida &&
+                            !cancelado &&
+                            (client.diasAtraso > 0 ? (
+                              <Badge
+                                variant="outline"
+                                className="border-red-200 bg-red-50 text-xs text-red-800"
+                              >
+                                {client.diasAtraso} día
+                                {client.diasAtraso === 1 ? "" : "s"} atraso
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="border-emerald-200 bg-emerald-50 text-xs text-emerald-800"
+                              >
+                                Al día
+                              </Badge>
+                            ))}
+                        </div>
+                        {client.vigilado && client.notaVigilancia ? (
+                          <p className="text-sm font-medium text-foreground">
+                            {client.notaVigilancia}
+                          </p>
+                        ) : null}
+                        <p className="text-sm text-muted-foreground">
+                          @{client.username}
+                          {client.cedula ? ` · C.C. ${client.cedula}` : ""}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Referido por {client.referralLabel}
+                        </p>
+                        {(client.placa || client.motoLabel) && (
+                          <p className="text-sm text-muted-foreground">
+                            {client.placa ? `Placa ${client.placa}` : null}
+                            {client.placa && client.motoLabel ? " · " : null}
+                            {client.motoLabel}
+                          </p>
+                        )}
+                        {client.fechaVenta && (
+                          <p className="text-base text-muted-foreground">
+                            Fecha de venta{" "}
+                            <span className="font-bold text-foreground">
+                              {formatDateOnly(client.fechaVenta)}
+                            </span>
+                          </p>
+                        )}
+                        {client.cuotasPagadas > 0 && (
+                          <p className="text-sm text-muted-foreground">
+                            {client.cuotasPagadas} cuota
+                            {client.cuotasPagadas === 1 ? "" : "s"} pagada
+                            {client.cuotasPagadas === 1 ? "" : "s"}
+                          </p>
+                        )}
+                      </div>
                     </Link>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="ml-auto text-muted-foreground hover:text-destructive"
-                      aria-label={`Eliminar ${client.displayName}`}
-                      disabled={pending}
-                      onClick={() => setToDelete(client)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+
+                    <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3">
+                      {client.puedeMarcarRecogida && !cancelado ? (
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          disabled={pending}
+                          onClick={() => marcarRecogida(client)}
+                        >
+                          Moto recogida
+                        </Button>
+                      ) : null}
+                      {client.compraId && !cancelado ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={pending}
+                          className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                          onClick={() => setToCancel(client)}
+                        >
+                          Cancelar contrato
+                        </Button>
+                      ) : null}
+                      {client.compraId ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={pending}
+                          onClick={() => setToVigilar(client)}
+                        >
+                          {client.vigilado ? "Editar vigilancia" : "Vigilar"}
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setFacturasUser({
+                            userId: client.userId,
+                            displayName: client.displayName,
+                          })
+                        }
+                      >
+                        <FileText className="mr-1.5 h-4 w-4" />
+                        Generar facturas
+                      </Button>
+                      <Link
+                        href={`/clientes/${client.userId}`}
+                        className="inline-flex items-center gap-1 text-sm font-medium text-foreground hover:text-foreground"
+                      >
+                        Ver ficha
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="ml-auto text-muted-foreground hover:text-destructive"
+                        aria-label={`Eliminar ${client.displayName}`}
+                        disabled={pending}
+                        onClick={() => setToDelete(client)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       </div>
 
@@ -263,6 +438,55 @@ export function ClientesSearchResults({
           }}
         />
       )}
+
+      <VigiladoDialog
+        client={toVigilar}
+        onOpenChange={(open) => {
+          if (!open) setToVigilar(null);
+        }}
+        onSaved={(next) => {
+          setList((prev) =>
+            prev.map((c) => (c.userId === next.userId ? { ...c, ...next } : c)),
+          );
+          setToVigilar(null);
+          router.refresh();
+        }}
+      />
+
+      <AlertDialog
+        open={toCancel !== null}
+        onOpenChange={(open) => {
+          if (!open && !pending) setToCancel(null);
+        }}
+      >
+        <AlertDialogContent className="bg-background">
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Cancelar contrato?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {toCancel?.displayName}
+              {toCancel?.cedula
+                ? ` (C.C. ${toCancel.cedula})`
+                : toCancel
+                  ? ` (@${toCancel.username})`
+                  : ""}
+              . La compra quedará como cancelada y se verá el sello en la
+              tarjeta. No se borra la información del cliente ni el historial.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Volver</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={pending}
+              onClick={(e) => {
+                e.preventDefault();
+                confirmCancelContrato();
+              }}
+            >
+              Sí, cancelar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={toDelete !== null}
@@ -281,7 +505,8 @@ export function ClientesSearchResults({
                   ? ` (@${toDelete.username})`
                   : ""}
               . Se borrarán por completo su cuenta, solicitud, contrato, visitas,
-              pagos, moto y archivos en Supabase. Esta acción no se puede deshacer.
+              pagos, moto y archivos en Supabase. Esta acción no se puede
+              deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -299,5 +524,97 @@ export function ClientesSearchResults({
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+function VigiladoDialog({
+  client,
+  onOpenChange,
+  onSaved,
+}: {
+  client: ClientSearchResult | null;
+  onOpenChange: (open: boolean) => void;
+  onSaved: (next: Pick<ClientSearchResult, "userId" | "vigilado" | "notaVigilancia">) => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [nota, setNota] = useState(client?.notaVigilancia ?? "");
+
+  useEffect(() => {
+    if (client) setNota(client.notaVigilancia ?? "");
+  }, [client]);
+
+  function guardar(vigilado: boolean) {
+    if (!client?.compraId) return;
+    const trimmed = nota.trim();
+    if (vigilado && !trimmed) {
+      toast.error("Indica el motivo de la vigilancia.");
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await setClienteVigilado({
+          userId: client.userId,
+          compraId: client.compraId!,
+          vigilado,
+          nota: trimmed || undefined,
+        });
+        toast.success(vigilado ? "Cliente vigilado." : "Vigilancia quitada.");
+        onSaved({
+          userId: client.userId,
+          vigilado,
+          notaVigilancia: vigilado ? trimmed : client.notaVigilancia,
+        });
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "No se pudo guardar la vigilancia.",
+        );
+      }
+    });
+  }
+
+  return (
+    <Dialog open={client !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-background sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {client?.vigilado ? "Editar vigilancia" : "Vigilar cliente"}
+          </DialogTitle>
+          <DialogDescription>
+            La nota se guarda en la compra de Bogotá (Pinilla), no en BGA.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="nota-vigilancia">Motivo de la vigilancia</Label>
+          <Textarea
+            id="nota-vigilancia"
+            value={nota}
+            onChange={(e) => setNota(e.target.value)}
+            rows={4}
+            placeholder="Ej.: Ya lo recogimos una vez; no dejar que suba la deuda."
+            className="min-h-24"
+          />
+        </div>
+        <DialogFooter>
+          {client?.vigilado ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => guardar(false)}
+            >
+              Quitar
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            disabled={pending || !nota.trim()}
+            onClick={() => guardar(true)}
+          >
+            {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {client?.vigilado ? "Guardar nota" : "Marcar vigilado"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

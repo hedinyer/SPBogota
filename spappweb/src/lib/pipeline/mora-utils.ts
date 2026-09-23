@@ -97,6 +97,31 @@ function recogerActivo(recoger?: MoraRecogerInput | null): boolean {
   );
 }
 
+export function motoYaRecogida(input: {
+  recoger?: MoraRecogerInput | null;
+  estadoFisico?: string | null;
+}): boolean {
+  if (input.recoger?.estado === "recogida") return true;
+  if (input.estadoFisico === "recogida") return true;
+  return false;
+}
+
+export function puedeMarcarMotoRecogida(input: {
+  compraEstado?: string | null;
+  diasAtraso?: number | null;
+  montoAdeudado?: number | null;
+  recoger?: MoraRecogerInput | null;
+  estadoFisico?: string | null;
+}): boolean {
+  if (input.compraEstado !== "entregada") return false;
+  if (motoYaRecogida(input)) return false;
+  const dias = input.diasAtraso ?? 0;
+  const monto = input.montoAdeudado ?? 0;
+  if (monto <= 0 || dias < DIAS_RECOGER_BANDEJA) return false;
+  if (input.recoger && !recogerActivo(input.recoger)) return false;
+  return true;
+}
+
 export function getMoraDisplay(input: {
   atraso?: AtrasoSnapshot | null;
   moroso?: MoraMorosoInput | null;

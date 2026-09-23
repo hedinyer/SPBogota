@@ -4,5 +4,7 @@ export function formatCop(amount: number): string {
     currency: "COP",
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
-  }).format(amount);
+  })
+    .format(amount)
+    .replace(/[\u00a0\u202f]/g, " ");
 }

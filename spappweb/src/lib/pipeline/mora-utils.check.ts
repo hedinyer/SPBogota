@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import {
   assertPuedeMarcarEntregada,
   DIAS_RECUPERACION_CLIENTE,
+  motoYaRecogida,
+  puedeMarcarMotoRecogida,
   getPlazoRecuperacion,
 } from "./mora-utils.ts";
 
@@ -47,6 +49,25 @@ assert.throws(
 assert.throws(
   () => assertPuedeMarcarEntregada("cancelada"),
   /cancelada/,
+);
+
+assert.equal(motoYaRecogida({ estadoFisico: "recogida" }), true);
+assert.equal(motoYaRecogida({ recoger: { estado: "pendiente" } }), false);
+assert.equal(
+  puedeMarcarMotoRecogida({
+    compraEstado: "entregada",
+    diasAtraso: 4,
+    montoAdeudado: 10000,
+  }),
+  true,
+);
+assert.equal(
+  puedeMarcarMotoRecogida({
+    compraEstado: "entregada",
+    diasAtraso: 2,
+    montoAdeudado: 10000,
+  }),
+  false,
 );
 
 console.log("mora-utils.check OK");

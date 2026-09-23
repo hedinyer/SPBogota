@@ -10,6 +10,7 @@ const checks = [
   "src/lib/pipeline/pipeline.check.ts",
   "src/lib/pipeline/atrasos-parcial.check.ts",
   "src/lib/pipeline/mora-utils.check.ts",
+  "src/lib/clientes/clientes-list-filters.check.ts",
   "src/lib/admin/titularidad.check.ts",
   "src/lib/garaje/stock-segunda.check.ts",
   "src/lib/payments/primer-pago-progress.check.ts",

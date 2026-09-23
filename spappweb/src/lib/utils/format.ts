@@ -1,17 +1,25 @@
 export { formatCop } from "./format-cop";
 
-export function formatDate(date: string | Date | null | undefined): string {  if (!date) return "—";
-  const d = typeof date === "string" ? new Date(date) : date;
+function esCo(date: Date, options: Intl.DateTimeFormatOptions): string {
+  // Node y el navegador no usan el mismo espacio en "p. m." (U+00A0 / U+202F).
   return new Intl.DateTimeFormat("es-CO", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(d);
+    timeZone: "America/Bogota",
+    ...options,
+  })
+    .format(date)
+    .replace(/[\u00a0\u202f]/g, " ");
+}
+
+export function formatDate(date: string | Date | null | undefined): string {
+  if (!date) return "—";
+  const d = typeof date === "string" ? new Date(date) : date;
+  return esCo(d, { dateStyle: "medium", timeStyle: "short" });
 }
 
 export function formatDateOnly(date: string | Date | null | undefined): string {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
-  return new Intl.DateTimeFormat("es-CO", { dateStyle: "medium" }).format(d);
+  return esCo(d, { dateStyle: "medium" });
 }
 
 export { formatCuotas } from "@/lib/payments/payment-metrics";

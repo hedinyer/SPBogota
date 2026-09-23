@@ -51,6 +51,8 @@ import {
   DIAS_MORA_BANDEJA,
   DIAS_RECOGER_BANDEJA,
   mergeRentingResumenWithAtraso,
+  motoYaRecogida,
+  puedeMarcarMotoRecogida,
 } from "@/lib/pipeline/mora-utils";
 import { formatCop } from "@/lib/utils/format";
 import {
@@ -1993,6 +1995,63 @@ function setMatchLabel(
   }
 }
 
+function parseVigilancia(adminData: unknown): {
+  vigilado: boolean;
+  notaVigilancia: string | null;
+} {
+  const data =
+    adminData && typeof adminData === "object"
+      ? (adminData as Record<string, unknown>)
+      : null;
+  const nota =
+    typeof data?.nota_vigilancia === "string" && data.nota_vigilancia.trim()
+      ? data.nota_vigilancia.trim()
+      : null;
+  return { vigilado: data?.vigilado === true, notaVigilancia: nota };
+}
+
+function listFlags(input: {
+  compraId: string | null;
+  compraEstado: ClientSearchResult["compraEstado"];
+  estadoFisico?: string | null;
+  fechaEntrega?: string | null;
+  seleccionadoAt?: string | null;
+  adminData?: unknown;
+  diasAtraso: number;
+  montoAdeudado: number;
+  recogerEstado?: string | null;
+}): Pick<
+  ClientSearchResult,
+  | "compraId"
+  | "motoRecogida"
+  | "puedeMarcarRecogida"
+  | "vigilado"
+  | "notaVigilancia"
+  | "fechaVenta"
+> {
+  const recoger = input.recogerEstado
+    ? { estado: input.recogerEstado as MotoRecogerEstado }
+    : null;
+  const vigilancia = parseVigilancia(input.adminData);
+  return {
+    compraId: input.compraId,
+    motoRecogida: motoYaRecogida({
+      recoger,
+      estadoFisico: input.estadoFisico,
+    }),
+    puedeMarcarRecogida: puedeMarcarMotoRecogida({
+      compraEstado: input.compraEstado,
+      diasAtraso: input.diasAtraso,
+      montoAdeudado: input.montoAdeudado,
+      recoger,
+      estadoFisico: input.estadoFisico,
+    }),
+    vigilado: vigilancia.vigilado,
+    notaVigilancia: vigilancia.notaVigilancia,
+    fechaVenta: input.fechaEntrega ?? input.seleccionadoAt ?? null,
+  };
+}
+
 export async function searchClients(
   query: string,
 ): Promise<ClientSearchResult[]> {
@@ -2046,12 +2105,12 @@ export async function searchClients(
   const userIds = [...matchLabels.keys()];
   if (userIds.length === 0) return [];
 
-  const [{ data: users }, { data: paidTarifas }, { data: atrasos }] =
+  const [{ data: users }, { data: paidTarifas }, { data: atrasos }, { data: recogers }] =
     await Promise.all([
       supabase
         .from("users")
         .select(
-          "id, user, users_documents(selfie_url, referral_source), user_moto_compra(id, modelo, color, placa, estado, bike_table(imagen_url)), visitas(cliente_nombre), digital_contracts(hoja_vida_data, contrato_data, created_at)",
+          "id, user, users_documents(selfie_url, referral_source), user_moto_compra(id, modelo, color, placa, estado, estado_fisico, fecha_entrega, seleccionado_at, admin_data, bike_table(imagen_url)), visitas(cliente_nombre), digital_contracts(hoja_vida_data, contrato_data, created_at)",
         )
         .in("id", userIds),
       supabase
@@ -2061,8 +2120,13 @@ export async function searchClients(
         .eq("estado", "pagada"),
       supabase
         .from("atrasos")
-        .select("user_id, dias_atraso")
+        .select("user_id, user_moto_compra_id, dias_atraso, monto_adeudado")
         .in("user_id", userIds),
+      supabase
+        .from("motos_para_recoger")
+        .select("user_id, estado, fecha_ingreso")
+        .in("user_id", userIds)
+        .order("fecha_ingreso", { ascending: false }),
     ]);
 
   const paidCount = new Map<number, number>();
@@ -2072,8 +2136,18 @@ export async function searchClients(
   }
 
   const diasByUser = new Map<number, number>();
+  const montoByUser = new Map<number, number>();
   for (const row of atrasos ?? []) {
     diasByUser.set(row.user_id as number, Number(row.dias_atraso) || 0);
+    montoByUser.set(row.user_id as number, Number(row.monto_adeudado) || 0);
+  }
+
+  const recogerByUser = new Map<number, string>();
+  for (const row of recogers ?? []) {
+    const id = row.user_id as number;
+    if (!recogerByUser.has(id)) {
+      recogerByUser.set(id, String(row.estado));
+    }
   }
 
   const results: ClientSearchResult[] = (users ?? []).flatMap((raw) => {
@@ -2091,6 +2165,10 @@ export async function searchClients(
             color: string;
             placa: string | null;
             estado: ClientSearchResult["compraEstado"];
+            estado_fisico: string | null;
+            fecha_entrega: string | null;
+            seleccionado_at: string | null;
+            admin_data: Record<string, unknown> | null;
             bike_table: { imagen_url: string | null } | { imagen_url: string | null }[] | null;
           }
         | {
@@ -2099,6 +2177,10 @@ export async function searchClients(
             color: string;
             placa: string | null;
             estado: ClientSearchResult["compraEstado"];
+            estado_fisico: string | null;
+            fecha_entrega: string | null;
+            seleccionado_at: string | null;
+            admin_data: Record<string, unknown> | null;
             bike_table: { imagen_url: string | null } | { imagen_url: string | null }[] | null;
           }[]
         | null;
@@ -2158,6 +2240,19 @@ export async function searchClients(
       visita?.cliente_nombre?.trim() ||
       user.user;
 
+    const diasAtraso = diasByUser.get(user.id) ?? 0;
+    const flags = listFlags({
+      compraId: compra?.id ?? null,
+      compraEstado: compra?.estado ?? null,
+      estadoFisico: compra?.estado_fisico,
+      fechaEntrega: compra?.fecha_entrega,
+      seleccionadoAt: compra?.seleccionado_at,
+      adminData: compra?.admin_data,
+      diasAtraso,
+      montoAdeudado: montoByUser.get(user.id) ?? 0,
+      recogerEstado: recogerByUser.get(user.id) ?? null,
+    });
+
     return [
       {
         userId: user.id,
@@ -2168,20 +2263,22 @@ export async function searchClients(
         motoLabel: compra ? `${compra.modelo} · ${compra.color}` : null,
         compraEstado: compra?.estado ?? null,
         cuotasPagadas: paidCount.get(user.id) ?? 0,
-        diasAtraso: diasByUser.get(user.id) ?? 0,
+        diasAtraso,
         matchLabel: matchLabels.get(user.id) ?? "—",
-        seleccionadoAt: null,
+        seleccionadoAt: compra?.seleccionado_at ?? null,
         selfieUrl: doc?.selfie_url ? String(doc.selfie_url) : null,
         motoImagenUrl: bike?.imagen_url ? String(bike.imagen_url) : null,
         referralLabel:
           referralLabel(resolveReferralSource(rawReferral)) ?? "Punto de venta",
+        ...flags,
       },
     ];
   });
 
-  return results.sort((a, b) =>
-    a.displayName.localeCompare(b.displayName, "es"),
-  );
+  return results.sort((a, b) => {
+    if (a.vigilado !== b.vigilado) return a.vigilado ? -1 : 1;
+    return a.displayName.localeCompare(b.displayName, "es");
+  });
 }
 
 export async function listClientesMotoCredito(
@@ -2201,9 +2298,8 @@ export async function listClientesMotoCredito(
   const { data: compras, error } = await supabase
     .from("user_moto_compra")
     .select(
-      "id, modelo, color, placa, estado, seleccionado_at, user_id, bike_table(imagen_url), users(id, user, users_documents(selfie_url, referral_source), visitas(cliente_nombre), digital_contracts(hoja_vida_data, contrato_data, created_at))",
+      "id, modelo, color, placa, estado, estado_fisico, seleccionado_at, fecha_entrega, admin_data, user_id, bike_table(imagen_url), users(id, user, users_documents(selfie_url, referral_source), visitas(cliente_nombre), digital_contracts(hoja_vida_data, contrato_data, created_at))",
     )
-    .neq("estado", "cancelada")
     .order("seleccionado_at", { ascending: false })
     .limit(limit);
 
@@ -2213,17 +2309,23 @@ export async function listClientesMotoCredito(
   const userIds = compras.map((row) => row.user_id as number);
   const compraIds = compras.map((row) => row.id as string);
 
-  const [{ data: paidTarifas }, { data: atrasos }] = await Promise.all([
-    supabase
-      .from("tarifas_pagadas")
-      .select("user_id")
-      .in("user_id", userIds)
-      .eq("estado", "pagada"),
-    supabase
-      .from("atrasos")
-      .select("user_moto_compra_id, dias_atraso")
-      .in("user_moto_compra_id", compraIds),
-  ]);
+  const [{ data: paidTarifas }, { data: atrasos }, { data: recogers }] =
+    await Promise.all([
+      supabase
+        .from("tarifas_pagadas")
+        .select("user_id")
+        .in("user_id", userIds)
+        .eq("estado", "pagada"),
+      supabase
+        .from("atrasos")
+        .select("user_moto_compra_id, dias_atraso, monto_adeudado")
+        .in("user_moto_compra_id", compraIds),
+      supabase
+        .from("motos_para_recoger")
+        .select("user_moto_compra_id, estado, fecha_ingreso")
+        .in("user_moto_compra_id", compraIds)
+        .order("fecha_ingreso", { ascending: false }),
+    ]);
 
   const paidCount = new Map<number, number>();
   for (const row of paidTarifas ?? []) {
@@ -2232,11 +2334,24 @@ export async function listClientesMotoCredito(
   }
 
   const diasByCompra = new Map<string, number>();
+  const montoByCompra = new Map<string, number>();
   for (const row of atrasos ?? []) {
     diasByCompra.set(
       row.user_moto_compra_id as string,
       Number(row.dias_atraso) || 0,
     );
+    montoByCompra.set(
+      row.user_moto_compra_id as string,
+      Number(row.monto_adeudado) || 0,
+    );
+  }
+
+  const recogerByCompra = new Map<string, string>();
+  for (const row of recogers ?? []) {
+    const id = row.user_moto_compra_id as string;
+    if (!recogerByCompra.has(id)) {
+      recogerByCompra.set(id, String(row.estado));
+    }
   }
 
   const results = compras.flatMap((raw) => {
@@ -2246,7 +2361,10 @@ export async function listClientesMotoCredito(
       color: string;
       placa: string | null;
       estado: ClientSearchResult["compraEstado"];
+      estado_fisico: string | null;
       seleccionado_at: string;
+      fecha_entrega: string | null;
+      admin_data: Record<string, unknown> | null;
       user_id: number;
       bike_table:
         | { imagen_url: string | null }
@@ -2306,6 +2424,18 @@ export async function listClientesMotoCredito(
 
     const usersRaw = compra.users;
     const user = Array.isArray(usersRaw) ? usersRaw[0] : usersRaw;
+    const diasAtraso = diasByCompra.get(compra.id) ?? 0;
+    const flags = listFlags({
+      compraId: compra.id,
+      compraEstado: compra.estado,
+      estadoFisico: compra.estado_fisico,
+      fechaEntrega: compra.fecha_entrega,
+      seleccionadoAt: compra.seleccionado_at,
+      adminData: compra.admin_data,
+      diasAtraso,
+      montoAdeudado: montoByCompra.get(compra.id) ?? 0,
+      recogerEstado: recogerByCompra.get(compra.id) ?? null,
+    });
     if (!user) {
       return [
         {
@@ -2317,12 +2447,13 @@ export async function listClientesMotoCredito(
           motoLabel: `${compra.modelo} · ${compra.color}`,
           compraEstado: compra.estado,
           cuotasPagadas: paidCount.get(compra.user_id) ?? 0,
-          diasAtraso: diasByCompra.get(compra.id) ?? 0,
+          diasAtraso,
           matchLabel: "",
           seleccionadoAt: compra.seleccionado_at,
           selfieUrl: null,
           motoImagenUrl: null,
           referralLabel: "Punto de venta",
+          ...flags,
         },
       ];
     }
@@ -2378,18 +2509,23 @@ export async function listClientesMotoCredito(
         motoLabel: `${compra.modelo} · ${compra.color}`,
         compraEstado: compra.estado,
         cuotasPagadas: paidCount.get(user.id) ?? 0,
-        diasAtraso: diasByCompra.get(compra.id) ?? 0,
+        diasAtraso,
         matchLabel: "",
         seleccionadoAt: compra.seleccionado_at,
         selfieUrl: doc?.selfie_url ? String(doc.selfie_url) : null,
         motoImagenUrl: bike?.imagen_url ? String(bike.imagen_url) : null,
         referralLabel:
           referralLabel(resolveReferralSource(rawReferral)) ?? "Punto de venta",
+        ...flags,
       },
     ];
   });
 
   return results.sort((a, b) => {
+    const aCancel = a.compraEstado === "cancelada" ? 1 : 0;
+    const bCancel = b.compraEstado === "cancelada" ? 1 : 0;
+    if (aCancel !== bCancel) return aCancel - bCancel;
+    if (a.vigilado !== b.vigilado) return a.vigilado ? -1 : 1;
     if (b.diasAtraso !== a.diasAtraso) return b.diasAtraso - a.diasAtraso;
     const aAt = a.seleccionadoAt ? new Date(a.seleccionadoAt).getTime() : 0;
     const bAt = b.seleccionadoAt ? new Date(b.seleccionadoAt).getTime() : 0;
