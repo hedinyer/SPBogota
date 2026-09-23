@@ -1510,13 +1510,11 @@ export async function setClienteVigilado(
   if (fetchError) throw new Error(fetchError.message);
   if (!compra) throw new Error("Compra no encontrada.");
 
-  const adminData = {
+  const adminData: Record<string, unknown> = {
     ...((compra.admin_data as Record<string, unknown>) ?? {}),
     vigilado: parsed.vigilado,
+    ...(parsed.vigilado ? { nota_vigilancia: nota } : {}),
   };
-  if (parsed.vigilado) {
-    adminData.nota_vigilancia = nota;
-  }
 
   const { error } = await supabase
     .from("user_moto_compra")
