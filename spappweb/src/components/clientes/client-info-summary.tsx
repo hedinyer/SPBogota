@@ -8,7 +8,7 @@ import {
 } from "@/lib/pipeline/types";
 import { getMoraDisplay, moraEstadoLabel } from "@/lib/pipeline/mora-utils";
 import { referralLabel } from "@/lib/referrals";
-import { formatCop, formatCuotas } from "@/lib/utils/format";
+import { formatCop, formatCuotas, formatDate } from "@/lib/utils/format";
 import { getContractPublicUrl } from "@/lib/utils/storage-urls";
 import { GpsMotoPanel } from "@/components/pipeline/gps-moto-panel";
 import { Card, CardContent } from "@/components/ui/card";
@@ -226,10 +226,7 @@ export function ClientInfoSummary({
                       {" · perdonado "}
                       {formatCop(e.monto_adeudado_perdonado)}
                       {" · renovado "}
-                      {new Date(e.renovado_at).toLocaleString("es-CO", {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })}
+                      {formatDate(e.renovado_at)}
                     </span>
                     {pdfUrl ? (
                       <>
@@ -264,10 +261,7 @@ export function ClientInfoSummary({
                   </span>
                   <span className="text-muted-foreground">
                     {" · "}
-                    {new Date(e.at).toLocaleString("es-CO", {
-                      dateStyle: "short",
-                      timeStyle: "short",
-                    })}
+                    {formatDate(e.at)}
                     {e.motivo ? ` · ${e.motivo}` : ""}
                     {e.by ? ` · por ${e.by}` : ""}
                   </span>

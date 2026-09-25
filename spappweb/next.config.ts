@@ -7,6 +7,12 @@ const allowedDevOrigins = (process.env.ALLOWED_DEV_ORIGINS ?? "")
 
 const nextConfig: NextConfig = {
   ...(allowedDevOrigins.length > 0 ? { allowedDevOrigins } : {}),
+  // ponytail: Chrome/Cursor piden /json/version (CDP) al puerto de Next; no es ruta nuestra
+  logging: {
+    incomingRequests: {
+      ignore: [/\/json\/version/],
+    },
+  },
   reactCompiler: true,
   serverExternalPackages: ["sharp"],
   experimental: {

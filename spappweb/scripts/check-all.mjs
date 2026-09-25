@@ -14,6 +14,8 @@ const checks = [
   "src/lib/admin/titularidad.check.ts",
   "src/lib/garaje/stock-segunda.check.ts",
   "src/lib/payments/primer-pago-progress.check.ts",
+  "src/lib/payments/tarifa-abono-label.check.ts",
+  "src/lib/utils/format.check.ts",
   "src/lib/agent/tool-progress.check.ts",
   "src/lib/agent/chat-content.check.ts",
   "src/lib/agent/cobranza.check.ts",

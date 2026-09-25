@@ -8,12 +8,16 @@ import { markMotoRecogida, resolveMoroso } from "@/lib/actions/admin-actions";
 import {
   CONTEXTO_PAGO_LABELS,
   FRECUENCIA_LABELS,
-  TARIFA_ESTADO_LABELS,
   type ClientPipeline,
   type TarifaPagadaRow,
 } from "@/lib/pipeline/types";
 import { getMoraDisplay } from "@/lib/pipeline/mora-utils";
 import { cuotaFraction } from "@/lib/payments/payment-metrics";
+import {
+  TARIFA_ABONO_ADELANTADO,
+  TARIFA_ABONO_PARCIAL,
+  tarifaAbonoLabel,
+} from "@/lib/payments/tarifa-abono-label";
 import { formatCop, formatCuotas, formatDate, formatDateOnly } from "@/lib/utils/format";
 import {
   captureElementAsPng,
@@ -55,16 +59,15 @@ function tarifaBadgeVariant(estado: TarifaPagadaRow["estado"]) {
   }
 }
 
-function tarifaEstadoLabel(tarifa: TarifaPagadaRow): string {
-  const pagado = tarifa.monto_pagado ?? 0;
+function tarifaAbonoBadgeVariant(tarifa: TarifaPagadaRow) {
+  const label = tarifaAbonoLabel(tarifa);
   if (
-    tarifa.estado !== "pagada" &&
-    pagado > 0 &&
-    pagado < tarifa.monto_esperado
+    label === TARIFA_ABONO_PARCIAL ||
+    label === TARIFA_ABONO_ADELANTADO
   ) {
-    return "Parcial";
+    return "outline" as const;
   }
-  return TARIFA_ESTADO_LABELS[tarifa.estado];
+  return tarifaBadgeVariant(tarifa.estado);
 }
 
 function tarifaTieneAbono(tarifa: TarifaPagadaRow): boolean {
@@ -392,14 +395,8 @@ export function RentingPanel({ pipeline, userId }: RentingPanelProps) {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            variant={
-                              tarifaEstadoLabel(tarifa) === "Parcial"
-                                ? "outline"
-                                : tarifaBadgeVariant(tarifa.estado)
-                            }
-                          >
-                            {tarifaEstadoLabel(tarifa)}
+                          <Badge variant={tarifaAbonoBadgeVariant(tarifa)}>
+                            {tarifaAbonoLabel(tarifa)}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right" data-export-hide>
@@ -456,14 +453,8 @@ export function RentingPanel({ pipeline, userId }: RentingPanelProps) {
                       <p className="font-medium">
                         Periodo #{tarifa.numero_periodo}
                       </p>
-                      <Badge
-                        variant={
-                          tarifaEstadoLabel(tarifa) === "Parcial"
-                            ? "outline"
-                            : tarifaBadgeVariant(tarifa.estado)
-                        }
-                      >
-                        {tarifaEstadoLabel(tarifa)}
+                      <Badge variant={tarifaAbonoBadgeVariant(tarifa)}>
+                        {tarifaAbonoLabel(tarifa)}
                       </Badge>
                     </div>
                     <dl className="mt-3 flex flex-col gap-1.5">
@@ -696,7 +687,6 @@ function TarifaPagadoCell({ tarifa }: { tarifa: TarifaPagadaRow }) {
         }`}
       >
         {formatCuotas(fraccion)} cuota{fraccion === 1 ? "" : "s"}
-        {esParcial ? " · parcial" : esMayor ? " · mayor" : ""}
       </p>
     </div>
   );

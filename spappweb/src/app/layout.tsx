@@ -35,15 +35,6 @@ export default function RootLayout({
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} min-h-full antialiased`}
     >
-      <head>
-        {/* Evita que extensiones crypto rotas (sin window.ethereum) tumben la app */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html:
-              "try{window.ethereum=window.ethereum||{selectedAddress:void 0,isMetaMask:!1}}catch(e){}",
-          }}
-        />
-      </head>
       <body className="min-h-full bg-background font-sans text-foreground">
         <TooltipProvider>
           {children}
